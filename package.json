@@ -1,5 +1,5 @@
 {
-  "name": "nextlive",
+  "name": "@nextlive/react",
   "version": "0.1.0",
   "private": true,
   "scripts": {

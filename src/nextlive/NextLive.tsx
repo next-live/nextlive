@@ -3,8 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import GeminiMobileThemeChat, { Message } from './components/GeminiMobileThemeChat'; 
 import GeminiVoiceChat from './components/GeminiVoiceChat';
+import { usePathname } from 'next/navigation';
+
 interface NextLiveProps {
   children?: React.ReactNode;
+  skipDevelopmentCheck?: boolean;
+  skipPaths?: string[];
 }
 
 const GeminiIcon = () => (
@@ -20,7 +24,21 @@ const GeminiIcon = () => (
     </svg>
 );
 
-const NextLive: React.FC<NextLiveProps> = ({ children }) => {
+const isPathMatching = (currentPath: string, skipPath: string): boolean => {
+  // Convert wildcard pattern to regex
+  const pattern = skipPath.replace(/\*/g, '.*');
+  const regex = new RegExp(`^${pattern}$`);
+  return regex.test(currentPath);
+};
+
+const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = false, skipPaths = [] }) => {
+  // Return children directly if in development and not in development mode or if the path is in the skipPaths array
+  const pathname = usePathname();
+  const shouldSkip = skipPaths.some(skipPath => isPathMatching(pathname, skipPath));
+  
+  if (process.env.NODE_ENV === 'development' && !skipDevelopmentCheck && !shouldSkip) {
+    return <>{children}</>;
+  }
   const [isVisible, setIsVisible] = useState(false);  // Start hidden
   const [isTakingScreenshot, setIsTakingScreenshot] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);

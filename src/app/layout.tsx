@@ -27,13 +27,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {process.env.NODE_ENV === 'development' ? (
-          <NextLive>
-            {children}
-          </NextLive>
-        ) : (
-          children
-        )}
+        <NextLive skipPaths={['/docs/*']}>
+          {children}
+        </NextLive>
       </body>
     </html>
   );
