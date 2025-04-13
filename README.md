@@ -1,11 +1,9 @@
-
-![NextLive Logo](public/readme-logo.png)
-![NextLive Banner](public/readme-banner.png)
+<div align="center">
+<img src="public/readme-logo.png">
+<img src="public/readme-banner.png">
+</div>
 
 # NextLive
-
-
-
 NextLive is a Next.js application that provides live collaboration and real-time features. The project is built using modern web technologies and follows best practices for React and Next.js development.
 
 ## Tech Stack
