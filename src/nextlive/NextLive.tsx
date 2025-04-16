@@ -1,9 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import GeminiMobileThemeChat, { Message } from './components/GeminiMobileThemeChat'; 
+import React, { useState, useEffect, useRef } from 'react';
+import { GeminiMobileThemeChat, Message } from './components/GeminiMobileThemeChat'; 
 import GeminiVoiceChat from './components/GeminiVoiceChat';
 import { usePathname } from 'next/navigation';
+import { codeEditService, CodeEditRequest } from './services/codeEdit/codeEditService';
+import ReactDOM from 'react-dom/client';
+import { Editor } from '@monaco-editor/react';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
+import { IconButton, Box } from '@mui/material';
+import { Close } from '@mui/icons-material';
+import FileExplorer from './components/FileExplorer';
+import EditorOptions from '@monaco-editor/react';
 
 interface NextLiveProps {
   children?: React.ReactNode;
@@ -24,6 +32,24 @@ const GeminiIcon = () => (
     </svg>
 );
 
+const ClipboardIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+  </svg>
+);
+
+const PlayIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+  </svg>
+);
+
+const EditorIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+  </svg>
+);
+
 const isPathMatching = (currentPath: string, skipPath: string): boolean => {
   // Convert wildcard pattern to regex
   const pattern = skipPath.replace(/\*/g, '.*');
@@ -31,19 +57,129 @@ const isPathMatching = (currentPath: string, skipPath: string): boolean => {
   return regex.test(currentPath);
 };
 
+interface CodeBlockData {
+  filepath: string;
+  lineNumbers: string;
+  code: string;
+  language?: string;
+}
+
+const CodeBlockHeader: React.FC<{
+  filepath: string;
+  onCopy: () => void;
+  onPlay: () => void;
+}> = ({ filepath, onCopy, onPlay }) => (
+  <div className="flex items-center justify-between px-4 py-2 bg-gray-800 text-gray-200 rounded-t-md">
+    <span className="font-mono text-sm">{filepath}</span>
+    <div className="flex gap-2">
+      <button
+        onClick={onCopy}
+        className="p-1 hover:bg-gray-700 rounded transition-colors"
+        title="Copy code"
+      >
+        <ClipboardIcon />
+      </button>
+      <button
+        onClick={onPlay}
+        className="p-1 hover:bg-gray-700 rounded transition-colors"
+        title="Apply changes"
+      >
+        <PlayIcon />
+      </button>
+    </div>
+  </div>
+);
+
+const getInitialPosition = () => {
+  if (typeof window === "undefined") return { x: 0, y: 0 }; // SSR safety
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  return {
+    x: width / 2, // center horizontally
+    y: height - 50, // 50px from the bottom
+  };
+};
+
+const CodeBlock: React.FC<{
+  data: CodeBlockData;
+  onCopy: () => void;
+  onPlay: () => void;
+}> = ({ data, onCopy, onPlay }) => {
+  const [showEditor, setShowEditor] = useState(false);
+  const language = data.filepath.split('.').pop() || 'plaintext';
+  
+  return (
+    <div className="rounded-md overflow-hidden border border-gray-700 mb-4">
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-800 text-gray-200">
+        <span className="font-mono text-sm">{data.filepath}</span>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowEditor(prev => !prev)}
+            className="p-1 hover:bg-gray-700 rounded transition-colors"
+            title={showEditor ? "Show simple view" : "Show Monaco editor"}
+          >
+            <EditorIcon />
+          </button>
+          <button
+            onClick={onCopy}
+            className="p-1 hover:bg-gray-700 rounded transition-colors"
+            title="Copy code"
+          >
+            <ClipboardIcon />
+          </button>
+          <button
+            onClick={onPlay}
+            className="p-1 hover:bg-gray-700 rounded transition-colors"
+            title="Apply changes"
+          >
+            <PlayIcon />
+          </button>
+        </div>
+      </div>
+      {showEditor ? (
+        <div className="h-[200px]">
+          <Editor
+            height="100%"
+            defaultLanguage={language}
+            defaultValue={data.code}
+            options={{
+              readOnly: true,
+              minimap: { enabled: false },
+              lineNumbers: 'on',
+              folding: false,
+              fontSize: 14,
+              theme: 'vs-dark'
+            }}
+          />
+        </div>
+      ) : (
+        <pre className="p-4 bg-gray-900 text-gray-100 overflow-x-auto">
+          <code>{data.code}</code>
+        </pre>
+      )}
+    </div>
+  );
+};
+
 const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = false, skipPaths = [] }) => {
   // Return children directly if in development and not in development mode or if the path is in the skipPaths array
   const pathname = usePathname();
   const shouldSkip = skipPaths.some(skipPath => isPathMatching(pathname, skipPath));
   
-  if (process.env.NODE_ENV === 'development' && !skipDevelopmentCheck && !shouldSkip) {
-    return <>{children}</>;
-  }
+  // if (process.env.NODE_ENV === 'development' && !skipDevelopmentCheck && !shouldSkip) {
+  //   return <>{children}</>;
+  // }
   const [isVisible, setIsVisible] = useState(false);  // Start hidden
   const [isTakingScreenshot, setIsTakingScreenshot] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSidePanel, setIsSidePanel] = useState(false);
   const [panelWidth, setPanelWidth] = useState(350);
+  const codeBlocksDataRef = useRef(new Map<string, CodeBlockData>());
+  const [showEditor, setShowEditor] = useState(false);
+  const [editorContent, setEditorContent] = useState('');
+  const [editorLanguage, setEditorLanguage] = useState('typescript');
+  const [currentFilePath, setCurrentFilePath] = useState('');
 
   const toggleChat = () => {
     setIsVisible(prev => !prev);
@@ -65,9 +201,115 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isVisible]);
 
+  const handleCodeEdit = async (request: CodeEditRequest) => {
+    try {
+      console.log('Applying code edit:', request);
+      await codeEditService.applyEdit(request);
+      // Add success message
+      setMessages(prev => [...prev, { 
+        type: 'ai', 
+        content: `✅ Successfully applied changes to ${request.filepath}`,
+        isLoading: false
+      }]);
+    } catch (error: any) {
+      console.error('Error applying code edit:', error);
+      // Add error message
+      setMessages(prev => [...prev, { 
+        type: 'ai', 
+        content: `❌ Error applying changes to ${request.filepath}: ${error?.message || 'Unknown error'}`,
+        isLoading: false
+      }]);
+    }
+  };
+
   const handleSendMessage = (content: string) => {
-    const messageType = content.startsWith('data:image') ? 'image' : 'text';
-    setMessages(prev => [...prev, { type: messageType, content }]);
+    let messageType: 'text' | 'image' | 'ai' = 'text';
+    
+    if (content.startsWith('data:image')) {
+      messageType = 'image';
+    } else if (content.includes('```')) {
+      messageType = 'ai';
+    }
+
+    // Determine if this is a code edit message
+    const isCodeEditMessage = content.includes('```') && (
+      content.includes("I'll help you modify the code") ||
+      content.includes("Here's what I'll do") ||
+      content.includes("I will modify") ||
+      content.includes("I will update") ||
+      content.includes("I will change")
+    );
+
+    if (isCodeEditMessage) {
+      // Extract code blocks
+      const codeBlocks = content.match(/```[\s\S]*?```/g);
+      if (codeBlocks && codeBlocks.length >= 2) {
+        // Process code blocks in pairs
+        for (let i = 0; i < codeBlocks.length; i += 2) {
+          const originalBlock = codeBlocks[i];
+          const modifiedBlock = codeBlocks[i + 1];
+          
+          if (originalBlock && modifiedBlock) {
+            const originalLines = originalBlock.split('\n');
+            const modifiedLines = modifiedBlock.split('\n');
+            
+            const originalFirstLine = originalLines[0].replace('```', '').trim();
+            const modifiedFirstLine = modifiedLines[0].replace('```', '').trim();
+            
+            const originalParts = originalFirstLine.split(':');
+            const modifiedParts = modifiedFirstLine.split(':');
+            
+            if (originalParts.length >= 3 && modifiedParts.length >= 3) {
+              const filepath = originalParts[1];
+              const lineNumbers = originalParts[2];
+              const modifiedCode = modifiedLines.slice(1, -1).join('\n');
+              
+              handleCodeEdit({
+                filepath: filepath.trim(),
+                lineNumbers: lineNumbers.trim(),
+                code: modifiedCode.trim()
+              });
+            }
+          }
+        }
+      }
+      
+      // Process content for display
+      const processedContent = content.replace(/```([\s\S]*?)```/g, (match, codeContent) => {
+        const lines = codeContent.split('\n');
+        const firstLine = lines[0].trim();
+        const parts = firstLine.split(':');
+        
+        if (parts.length >= 3) {
+          const filepath = parts[1];
+          const blockId = Math.random().toString(36).substring(7);
+          const code = lines.slice(1).join('\n');
+          
+          codeBlocksDataRef.current.set(blockId, {
+            filepath: filepath.trim(),
+            lineNumbers: parts[2].trim(),
+            code: code.trim(),
+            language: filepath.split('.').pop() || 'plaintext'
+          });
+          
+          return `<div class="code-block" data-block-id="${blockId}"></div>`;
+        }
+        return match;
+      });
+      
+      setMessages(prev => [...prev, { 
+        type: 'ai', 
+        content: processedContent,
+        isLoading: false
+      }]);
+    } else {
+      setMessages(prev => [...prev, { 
+        type: messageType, 
+        content,
+        isLoading: false
+      }]);
+    }
+    
     setIsSidePanel(true);
   };
 
@@ -84,6 +326,218 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
     }
   }, [messages]);
 
+  // Update the code block rendering effect
+  useEffect(() => {
+    const handleCopy = async (code: string) => {
+      try {
+        await navigator.clipboard.writeText(code);
+      } catch (err) {
+        console.error('Failed to copy code:', err);
+      }
+    };
+
+    const handlePlay = (blockData: CodeBlockData) => {
+      handleCodeEdit({
+        filepath: blockData.filepath,
+        lineNumbers: blockData.lineNumbers,
+        code: blockData.code
+      });
+    };
+
+    document.querySelectorAll('.code-block').forEach(block => {
+      const blockId = block.getAttribute('data-block-id');
+      if (!blockId) return;
+
+      const blockData = codeBlocksDataRef.current.get(blockId);
+      if (!blockData) return;
+
+      const root = ReactDOM.createRoot(block);
+      root.render(
+        <CodeBlock
+          data={blockData}
+          onCopy={() => handleCopy(blockData.code)}
+          onPlay={() => handlePlay(blockData)}
+        />
+      );
+    });
+
+    return () => {
+      document.querySelectorAll('.code-block').forEach(block => {
+        try {
+          const root = ReactDOM.createRoot(block);
+          root.unmount();
+        } catch (err) {
+          console.error('Error unmounting code block:', err);
+        }
+      });
+    };
+  }, [messages]);
+
+  // Add function to get current file code
+  const getCurrentFileCode = async () => {
+    try {
+      // Get the current file path from the URL
+      const pathname = window.location.pathname;
+      let filePath = pathname.startsWith('/') ? pathname.slice(1) : pathname;
+      
+      // If it's a page route, add the page.tsx extension
+      if (!filePath.includes('.')) {
+        filePath = `${filePath}/page.tsx`;
+      }
+      
+      // Use codeEditService to read the file
+      const code = await codeEditService.readFile(filePath);
+      setCurrentFilePath(filePath);
+      return code;
+    } catch (error) {
+      console.error('Error reading file:', error);
+      return 'Error loading file code';
+    }
+  };
+
+  // Update function to handle opening editor
+  const handleOpenEditor = async () => {
+    const code = await getCurrentFileCode();
+    setEditorContent(code);
+    
+    // Set language based on file extension
+    const extension = currentFilePath.split('.').pop()?.toLowerCase();
+    const languageMap: { [key: string]: string } = {
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+      'html': 'html',
+      'css': 'css',
+      'json': 'json',
+      'md': 'markdown',
+      'py': 'python',
+      'java': 'java',
+      'c': 'c',
+      'cpp': 'cpp',
+      'cs': 'csharp',
+      'go': 'go',
+      'rs': 'rust',
+      'rb': 'ruby',
+      'php': 'php',
+      'sh': 'shell',
+      'yaml': 'yaml',
+      'yml': 'yaml',
+      'xml': 'xml'
+    };
+    
+    setEditorLanguage(languageMap[extension || ''] || 'plaintext');
+    setShowEditor(true);
+  };
+
+  const handleFileSelect = async (filePath: string) => {
+    try {
+      const code = await codeEditService.readFile(filePath);
+      setEditorContent(code);
+      setCurrentFilePath(filePath);
+      
+      // Set language based on file extension
+      const extension = filePath.split('.').pop()?.toLowerCase();
+      const languageMap: { [key: string]: string } = {
+        'ts': 'typescript',
+        'tsx': 'typescript',
+        'js': 'javascript',
+        'jsx': 'javascript',
+        'html': 'html',
+        'css': 'css',
+        'json': 'json',
+        'md': 'markdown',
+        'py': 'python',
+        'java': 'java',
+        'c': 'c',
+        'cpp': 'cpp',
+        'cs': 'csharp',
+        'go': 'go',
+        'rs': 'rust',
+        'rb': 'ruby',
+        'php': 'php',
+        'sh': 'shell',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'xml': 'xml'
+      };
+      
+      setEditorLanguage(languageMap[extension || ''] || 'plaintext');
+    } catch (error) {
+      console.error('Error reading file:', error);
+    }
+  };
+  const editorOptions = {
+    folding: true,
+    fontSize: 14,
+    theme: 'vs-dark',
+    readOnly: true,
+    // Enable syntax highlighting features
+    bracketPairColorization: {
+      enabled: true,
+    },
+    guides: {
+      bracketPairs: true,
+      bracketPairsHorizontal: true,
+      highlightActiveBracketPair: true,
+      indentation: true
+    },
+    // Enable semantic highlighting
+    semanticHighlighting: { enabled: true },
+    // Enable code lens
+    codeLens: true,
+    // Enable parameter hints
+    parameterHints: {
+      enabled: true
+    },
+    // Enable quick suggestions
+    quickSuggestions: {
+      other: true,
+      comments: true,
+      strings: true
+    },
+    // Enable word based suggestions
+    wordBasedSuggestions: true,
+    // Enable auto closing brackets
+    autoClosingBrackets: 'always',
+    autoClosingQuotes: 'always',
+    // Enable auto indentation
+    autoIndent: 'advanced',
+    // Enable format on paste
+    formatOnPaste: true,
+    // Enable format on type
+    formatOnType: true,
+    // Enable smooth scrolling
+    smoothScrolling: true,
+    // Enable mouse wheel zoom
+    mouseWheelZoom: true,
+    // Enable multi cursor
+    multiCursorModifier: 'alt',
+    // Enable accessibility support
+    accessibilitySupport: 'auto',
+    // Enable cursor blinking
+    cursorBlinking: 'smooth',
+    // Enable cursor style
+    cursorStyle: 'line',
+    // Enable cursor width
+    cursorWidth: 2,
+    // Enable font ligatures
+    fontLigatures: true,
+    // Enable render whitespace
+    renderWhitespace: 'selection',
+    // Enable scrollbar
+    scrollbar: {
+      vertical: 'visible',
+      horizontal: 'visible',
+      useShadows: false,
+      verticalHasArrows: false,
+      horizontalHasArrows: false,
+      verticalScrollbarSize: 10,
+      horizontalScrollbarSize: 10,
+      arrowSize: 30
+    }
+  };
+
   return (
     <div className="next-live flex w-full h-screen">
       <div className={`transition-all duration-300 ease-in-out ${isSidePanel ? `w-[calc(100%-${panelWidth}px)]` : 'w-full'}`}>
@@ -98,6 +552,16 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
         }}
       >
         <GeminiIcon />
+      </button>
+      <button
+        className="fixed bottom-8 cursor-pointer right-24 bg-white hover:bg-gray-50 rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 hover:shadow-xl"
+        onClick={handleOpenEditor}
+        style={{
+          opacity: isVisible && !isSidePanel ? 0 : 1,
+          pointerEvents: isVisible && !isSidePanel ? 'none' : 'auto'
+        }}
+      >
+        <EditorIcon />
       </button>
       {isTakingScreenshot && (
         <div className="fixed inset-0 pointer-events-none z-50">
@@ -114,9 +578,56 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
         setIsTakingScreenshot={setIsTakingScreenshot}
         isSidePanel={isSidePanel}
         width={panelWidth}
+        theme="dark"
+        themeStyle="glassmorphism"
         onWidthChange={setPanelWidth}
+        initialPosition={{ x: getInitialPosition().x, y: getInitialPosition().y }}
+        
       />
       <GeminiVoiceChat apiKey={process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''} />
+
+      <Dialog
+        open={showEditor}
+        onClose={() => setShowEditor(false)}
+        maxWidth="xl"
+        fullWidth
+        PaperProps={{
+          sx: {
+            height: '90vh',
+            maxHeight: '1200px'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          borderBottom: '1px solid rgba(0,0,0,0.1)',
+          pb: 1
+        }}>
+          <span>File: {currentFilePath}</span>
+          <IconButton onClick={() => setShowEditor(false)} size="small">
+            <Close />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0, overflow: 'hidden', display: 'flex' }}>
+          <FileExplorer onFileSelect={handleFileSelect} />
+          <Box sx={{ flex: 1, height: '100%' }}>
+            <Editor
+              height="100%"
+              defaultLanguage={editorLanguage}
+              value={editorContent}
+              options={editorOptions}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ 
+          borderTop: '1px solid rgba(0,0,0,0.1)',
+          p: 1
+        }}>
+          <Button onClick={() => setShowEditor(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };
