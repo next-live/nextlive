@@ -8,7 +8,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const baseDir = req.query.baseDir as string || 'src/nextlive';
+    const SAFE_ROOT = path.resolve('src/nextlive');
+    const baseDirInput = req.query.baseDir as string || '';
+    const baseDir = path.resolve(SAFE_ROOT, baseDirInput);
+    if (!baseDir.startsWith(SAFE_ROOT)) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
     const depth = parseInt(req.query.depth as string) || 2;
 
     const getStructure = (dir: string, currentDepth: number): any => {
