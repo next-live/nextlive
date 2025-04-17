@@ -12,6 +12,7 @@ import { IconButton, Box } from '@mui/material';
 import { Close } from '@mui/icons-material';
 import FileExplorer from './components/FileExplorer';
 import EditorOptions from '@monaco-editor/react';
+import config from '../../nextlive.config.json'
 
 interface NextLiveProps {
   children?: React.ReactNode;
@@ -94,11 +95,17 @@ const getInitialPosition = () => {
   if (typeof window === "undefined") return { x: 0, y: 0 }; // SSR safety
   const width = window.innerWidth;
   const height = window.innerHeight;
+  console.log(config);
+
+  console.log('Width:', width, 'Height:', height);
+  // Adjust the initial position based on the screen size
+
 
   return {
     x: width / 2, // center horizontally
-    y: height - 50, // 50px from the bottom
+    y: height - 300, // 50px from the bottom
   };
+
 };
 
 const CodeBlock: React.FC<{

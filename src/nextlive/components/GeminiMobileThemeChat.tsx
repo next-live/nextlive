@@ -13,6 +13,10 @@ import { geminiService } from '@/nextlive/services/gemini/chat/geminiService';
 import Image from 'next/image';
 import { CodeBlock } from './CodeBlock';
 import Editor from '@monaco-editor/react';
+// Add this import at the top with other imports
+import { Menu, MenuItem, ListItemIcon, ListItemText, TextField, Autocomplete } from '@mui/material';
+import { MoreVert as MoreIcon, InsertDriveFile as FileIcon } from '@mui/icons-material';
+import config from '../../../nextlive.config.json';
 
 export interface Message {
   type: 'text' | 'image' | 'ai';
@@ -37,7 +41,10 @@ interface GeminiMobileThemeChatProps {
   theme?: ThemeType;
   themeStyle?: ThemeStyle;
   initialPosition?: { x: number; y: number };
+  isMovable?: boolean;
 }
+
+
 
 // Add EditorIcon component
 const EditorIcon = () => (
@@ -58,10 +65,16 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
   onWidthChange,
   theme = 'light',
   themeStyle = 'default',
-  initialPosition = { x: 0, y: 0 }
+  initialPosition = { x: 0, y: 0 },
+  isMovable = false,
 }) => {
   const [message, setMessage] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>(parentMessages);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+const [files, setFiles] = useState<string[]>([]);
+const [selectedFile, setSelectedFile] = useState<string | null>(null);
+const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [screenshotData, setScreenshotData] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState<boolean>(false);
@@ -72,8 +85,71 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
   const [showEditor, setShowEditor] = useState(false);
   const [editorLanguage, setEditorLanguage] = useState('typescript');
   const [editorContent, setEditorContent] = useState('');
-  const isDark = theme === 'dark';
+  // Add to your state variables
+const [showFileDropdown, setShowFileDropdown] = useState(false);
+const [filteredFiles, setFilteredFiles] = useState<string[]>([]);
+const [searchTerm, setSearchTerm] = useState('');
+const [cursorPosition, setCursorPosition] = useState<number>(0);
+const inputRef = useRef<HTMLInputElement>(null);
 
+  const isDark = theme === 'dark';
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setMessage(value);
+    
+    // Get cursor position
+    const cursorPos = e.target.selectionStart || 0;
+    setCursorPosition(cursorPos);
+    
+    // Check if we should show the file dropdown
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const lastAtSymbol = textBeforeCursor.lastIndexOf('@');
+    
+    if (lastAtSymbol !== -1 && (lastAtSymbol === 0 || value[lastAtSymbol - 1] === ' ' || value[lastAtSymbol - 1] === '\n')) {
+      const searchAfterAt = textBeforeCursor.substring(lastAtSymbol + 1);
+      
+      // Check if there's a space after the search term
+      if (!searchAfterAt.includes(' ') && !searchAfterAt.includes('\n')) {
+        setSearchTerm(searchAfterAt.toLowerCase());
+        
+        // Filter files based on search term
+        const filtered = files.filter(file => 
+          file.toLowerCase().includes(searchAfterAt.toLowerCase()) || 
+          file.split('/').pop()?.toLowerCase().includes(searchAfterAt.toLowerCase())
+        );
+        
+        setFilteredFiles(filtered.slice(0, 5)); // Limit to 5 results
+        setShowFileDropdown(true);
+        return;
+      }
+    }
+    
+    setShowFileDropdown(false);
+  };
+  const handleFileSelectFromDropdown = (file: string) => {
+    const textBeforeCursor = message.substring(0, cursorPosition);
+    const lastAtSymbol = textBeforeCursor.lastIndexOf('@');
+    
+    if (lastAtSymbol !== -1) {
+      // Replace @search_term with @file_path
+      const textBeforeAt = message.substring(0, lastAtSymbol);
+      const textAfterCursor = message.substring(cursorPosition);
+      
+      const newMessage = textBeforeAt + '@' + file + ' ' + textAfterCursor;
+      setMessage(newMessage);
+      
+      // Set cursor after the inserted file path
+      setTimeout(() => {
+        if (inputRef.current) {
+          const newCursorPos = lastAtSymbol + file.length + 2; // +2 for @ and space
+          inputRef.current.focus();
+          inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+    }
+    
+    setShowFileDropdown(false);
+  };
   // Update local messages when parent messages change
   useEffect(() => {
     setMessages(parentMessages);
@@ -103,7 +179,71 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isResizing, onWidthChange]);
+  const fetchFiles = async () => {
+    try {
+      setIsLoadingFiles(true);
+      // Use the project structure API endpoint
+      const baseDir = 'src/'; // Can be configured to start from a specific directory
+      const depth = 10; // How deep to traverse the directory structure
+      const filesEndpoint =`/api/project-structure?baseDir=${encodeURIComponent(baseDir)}&depth=${depth}`;
+      
+      const response = await fetch(filesEndpoint);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch files');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.structure) {
+        // Convert the structure to a flat array of file paths
+        const flattenStructure = (obj: any, path = ''): string[] => {
+          let results: string[] = [];
+          
+          for (const [key, value] of Object.entries(obj)) {
+            const currentPath = path ? `${path}/${key}` : key;
+            console.log(value)
+            if (value.type === 'file') {
+              results.push(currentPath);
+            } else if (value.type === 'directory' && value.children) {
+              results = [...results, ...flattenStructure(value.children, currentPath)];
+            }
+          }
 
+          console.log(results)
+          
+          return results;
+        };
+        
+        const fileList = flattenStructure(data.structure);
+        setFiles(fileList);
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (error) {
+      console.error('Error fetching files:', error);
+      // Fallback to some dummy files for demo
+      setFiles([
+        'src/pages/index.tsx',
+        'src/components/Header.tsx',
+        'src/styles/globals.css',
+        'package.json',
+        'next.config.js'
+      ]);
+    } finally {
+      setIsLoadingFiles(false);
+    }
+  };
+  useEffect(() => {
+    fetchFiles();
+  }, []);
+
+  const handleFileSelect = (file: string | null) => {
+    setSelectedFile(file);
+    if (file) {
+      setMessage(prev => `/show ${file}\n${prev}`);
+    }
+  };
   // Handle drag and drop
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
@@ -115,6 +255,7 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
     };
 
     const handleMouseMove = (e: MouseEvent) => {
+      if(!isMovable) return;
       if (isDragging) {
         setPosition({
           x: e.clientX - (dragRef.current?.offsetWidth || 0) / 2,
@@ -436,22 +577,103 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
             </IconButton>
           </Box>
         )}
-        <InputBase
-          fullWidth
-          multiline
-          placeholder="Type a message..."
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={isProcessing}
-          sx={{ 
-            fontSize: '16px',
-            color: themeStyles.color,
-            '&::placeholder': {
-              color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
-            },
-          }}
-        />
+        <Box sx={{ position: 'relative', width: '100%' }}>
+  <InputBase
+    fullWidth
+    multiline
+    placeholder="Type a message... (Type @ to mention files)"
+    value={message}
+    onChange={handleInputChange}
+    onKeyDown={handleKeyDown}
+    disabled={isProcessing}
+    ref={inputRef}
+    sx={{ 
+      fontSize: '16px',
+      color: themeStyles.color,
+      '&::placeholder': {
+        color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+      },
+    }}
+  />
+  
+  {showFileDropdown && filteredFiles.length > 0 && (
+    <Paper
+      elevation={3}
+      sx={{
+        position: 'absolute',
+        bottom: '100%',
+        left: 0,
+        width: '100%',
+        maxHeight: '200px',
+        overflowY: 'auto',
+        marginBottom: '8px',
+        backgroundColor: isDark ? 'rgba(30, 30, 30, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '8px',
+        border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
+        zIndex: 1000,
+      }}
+    >
+      {filteredFiles.map((file, index) => {
+        const fileName = file.split('/').pop() || file;
+        const fileNameLower = fileName.toLowerCase();
+        const searchTermLower = searchTerm.toLowerCase();
+        
+        let highlightedName;
+        
+        if (searchTerm && fileNameLower.includes(searchTermLower)) {
+          const startIndex = fileNameLower.indexOf(searchTermLower);
+          highlightedName = (
+            <>
+              {fileName.substring(0, startIndex)}
+              <span style={{ 
+                backgroundColor: isDark ? 'rgba(78, 205, 196, 0.3)' : 'rgba(25, 118, 210, 0.1)',
+                padding: '0 2px',
+                borderRadius: '2px'
+              }}>
+                {fileName.substring(startIndex, startIndex + searchTerm.length)}
+              </span>
+              {fileName.substring(startIndex + searchTerm.length)}
+            </>
+          );
+        } else {
+          highlightedName = fileName;
+        }
+        
+        return (
+          <MenuItem
+            key={file}
+            onClick={() => handleFileSelectFromDropdown(file)}
+            sx={{
+              py: 1,
+              '&:hover': {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+              }
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: '30px' }}>
+              <FileIcon fontSize="small" color={isDark ? 'primary' : 'primary'} />
+            </ListItemIcon>
+            <ListItemText
+              primary={highlightedName}
+              secondary={file}
+              primaryTypographyProps={{ 
+                noWrap: true, 
+                fontSize: '14px',
+                fontWeight: 500
+              }}
+              secondaryTypographyProps={{ 
+                noWrap: true, 
+                fontSize: '12px',
+                color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'
+              }}
+            />
+          </MenuItem>
+        );
+      })}
+    </Paper>
+  )}
+</Box>
       </Box>
       
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
@@ -554,6 +776,8 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
           }
         }}
       >
+
+        
         <DialogTitle sx={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
@@ -796,6 +1020,166 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
               },
             }}
           >
+<Box sx={{ display: 'flex', alignItems: 'center', ml: 'auto', mr: 1 }}>
+  <Autocomplete
+    id="file-select"
+    options={files}
+    loading={isLoadingFiles}
+    value={selectedFile}
+    onChange={(_, newValue) => handleFileSelect(newValue)}
+    sx={{
+      width: 250,
+      '& .MuiOutlinedInput-root': {
+        borderRadius: '20px',
+        height: '36px',
+        fontSize: '14px',
+        backgroundColor: isDark 
+          ? 'rgba(255,255,255,0.08)' 
+          : 'rgba(0,0,0,0.04)',
+        backdropFilter: 'blur(8px)',
+        border: isDark 
+          ? '1px solid rgba(255,255,255,0.1)' 
+          : '1px solid rgba(0,0,0,0.05)',
+        boxShadow: isDark 
+          ? '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' 
+          : '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
+        '&:hover': {
+          backgroundColor: isDark 
+            ? 'rgba(255,255,255,0.12)' 
+            : 'rgba(0,0,0,0.06)',
+        },
+      },
+      '& .MuiAutocomplete-popper': {
+        backdropFilter: 'blur(8px)',
+        backgroundColor: isDark 
+          ? 'rgba(26, 26, 26, 0.8)' 
+          : 'rgba(255, 255, 255, 0.8)',
+        borderRadius: '12px',
+        boxShadow: isDark 
+          ? '0 4px 12px -1px rgba(0, 0, 0, 0.3), 0 2px 8px -1px rgba(0, 0, 0, 0.2)' 
+          : '0 4px 12px -1px rgba(0, 0, 0, 0.15), 0 2px 8px -1px rgba(0, 0, 0, 0.1)',
+      },
+      '& .MuiAutocomplete-paper': {
+        backgroundColor: 'transparent',
+        backdropFilter: 'blur(8px)',
+      }
+    }}
+    filterOptions={(options, state) => {
+      // Custom filter function to implement search
+      const inputValue = state.inputValue.toLowerCase();
+      if (!inputValue) return options;
+      
+      return options.filter(option => 
+        option.toLowerCase().includes(inputValue) || 
+        option.split('/').pop()?.toLowerCase().includes(inputValue)
+      );
+    }}
+    renderInput={(params) => (
+      <TextField
+        {...params}
+        variant="outlined"
+        placeholder="Search files..."
+        size="small"
+        InputProps={{
+          ...params.InputProps,
+          startAdornment: (
+            <FileIcon sx={{ color: isDark ? 'rgba(255,255,255,0.7)' : '#5f6368', mr: 1, fontSize: '18px' }} />
+          ),
+        }}
+      />
+    )}
+    renderOption={(props, option, state) => {
+      // Extract key from props
+      const { key, ...otherProps } = props;
+      
+      // Highlight matched text parts if searching
+      let primaryText = option.split('/').pop() || '';
+      let secondaryText = option;
+      
+      const inputValue = state.inputValue.toLowerCase();
+      if (inputValue) {
+        const primaryLower = primaryText.toLowerCase();
+        const secondaryLower = secondaryText.toLowerCase();
+        
+        // Function to highlight matched text
+        const highlightText = (text, isMatch) => (
+          isMatch ? (
+            <span style={{ 
+              backgroundColor: isDark ? 'rgba(78, 205, 196, 0.3)' : 'rgba(25, 118, 210, 0.1)',
+              padding: '0 2px',
+              borderRadius: '2px'
+            }}>
+              {text}
+            </span>
+          ) : text
+        );
+        
+        if (primaryLower.includes(inputValue)) {
+          const startIndex = primaryLower.indexOf(inputValue);
+          primaryText = (
+            <>
+              {primaryText.substring(0, startIndex)}
+              {highlightText(primaryText.substring(startIndex, startIndex + inputValue.length), true)}
+              {primaryText.substring(startIndex + inputValue.length)}
+            </>
+          );
+        }
+        
+        if (secondaryLower.includes(inputValue)) {
+          const startIndex = secondaryLower.indexOf(inputValue);
+          secondaryText = (
+            <>
+              {secondaryText.substring(0, startIndex)}
+              {highlightText(secondaryText.substring(startIndex, startIndex + inputValue.length), true)}
+              {secondaryText.substring(startIndex + inputValue.length)}
+            </>
+          );
+        }
+      }
+      
+      return (
+        <MenuItem key={key} {...otherProps} sx={{
+          backdropFilter: 'blur(8px)',
+          '&:hover': {
+            backgroundColor: isDark 
+              ? 'rgba(255,255,255,0.1)' 
+              : 'rgba(0,0,0,0.04)',
+          },
+          '&.Mui-selected': {
+            backgroundColor: isDark 
+              ? 'rgba(78, 205, 196, 0.2)' 
+              : 'rgba(25, 118, 210, 0.08)',
+          }
+        }}>
+          <ListItemIcon sx={{ minWidth: '30px' }}>
+            <FileIcon fontSize="small" color={isDark ? 'primary' : 'primary'} />
+          </ListItemIcon>
+          <ListItemText 
+            primary={primaryText} 
+            secondary={secondaryText}
+            primaryTypographyProps={{ 
+              noWrap: true, 
+              fontSize: '14px',
+              fontWeight: inputValue ? 500 : 400
+            }}
+            secondaryTypographyProps={{ 
+              noWrap: true, 
+              fontSize: '12px',
+              color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'
+            }}
+          />
+        </MenuItem>
+      );
+    }}
+    PopperComponent={(props) => (
+      <div {...props} style={{
+        ...props.style,
+        zIndex: 9999,
+        backdropFilter: 'blur(8px)',
+      }} />
+    )}
+  />
+</Box>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <Typography
                 sx={{

@@ -77,7 +77,7 @@ export async function POST(request: Request) {
 
     switch (operation) {
       case 'read':
-        absolutePath = path.join(process.cwd(), "src/app", filepath);
+        absolutePath = path.join(process.cwd(), "src/", filepath);
         if (!fs.existsSync(absolutePath)) {
           return NextResponse.json(
             { error: 'File not found' },
