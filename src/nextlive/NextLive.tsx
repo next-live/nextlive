@@ -194,7 +194,7 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
   const [editorLanguage, setEditorLanguage] = useState('typescript');
   const [currentFilePath, setCurrentFilePath] = useState('');
   const [versionInfo, setVersionInfo] = useState<VersionInfo>({
-    currentVersion: "1.0-alpha-release:re3sadv",
+    currentVersion: "1.0-alpha-release-re3sadv",
     latestVersion: null,
     needsUpdate: false
   });
