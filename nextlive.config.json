@@ -1,5 +1,7 @@
 {
     "theme": "light",
     "chatType":"geminiVoiceChat",
-    "chatTheme":"glassmorhism"
+    "chatTheme":"glassmorhism",
+    "version": "1.0.0",
+    "githubRepo": "https://api.github.com/repos/nextlive/nextlive/releases/latest"
 }

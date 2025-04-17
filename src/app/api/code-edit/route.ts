@@ -50,7 +50,8 @@ function buildFileTree(dir: string, basePath: string = ''): FileNode[] {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { filepath, operation, lineNumbers, code, path: listPath } = body;
+    let { filepath, operation, lineNumbers, code, path: listPath } = body;
+    filepath = filepath.replace('@','')
 
     if (operation === 'list') {
       const basePath = path.join(process.cwd(), listPath || 'src');
@@ -88,10 +89,15 @@ export async function POST(request: Request) {
         const content = fs.readFileSync(absolutePath, 'utf-8');
         return NextResponse.json({ content });
 
+      case 'write':
       case 'edit':
-        // Check if file exists
+        // Create directory if it doesn't exist
+        fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+
+        // If file doesn't exist, create it
         if (!fs.existsSync(absolutePath)) {
-          return NextResponse.json({ error: 'File does not exist' }, { status: 404 });
+          fs.writeFileSync(absolutePath, code || '');
+          return NextResponse.json({ success: true });
         }
 
         // Read the existing file
@@ -102,6 +108,7 @@ export async function POST(request: Request) {
         if (lineNumbers) {
           const [start, end] = lineNumbers.split('-').map((n: string) => parseInt(n));
           if (!isNaN(start) && !isNaN(end)) {
+            // Replace the lines in the specified range
             const newLines = [
               ...lines.slice(0, start - 1),
               code,
@@ -112,8 +119,8 @@ export async function POST(request: Request) {
           }
         }
 
-        // If no line numbers provided or invalid, append to the end of the file
-        fs.appendFileSync(absolutePath, '\n' + code);
+        // If no line numbers provided, replace the entire file content
+        fs.writeFileSync(absolutePath, code || '');
         return NextResponse.json({ success: true });
 
       case 'create':
@@ -126,7 +133,7 @@ export async function POST(request: Request) {
         fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
         
         // Write the file
-        fs.writeFileSync(absolutePath, code);
+        fs.writeFileSync(absolutePath, code || '');
         return NextResponse.json({ success: true });
 
       default:

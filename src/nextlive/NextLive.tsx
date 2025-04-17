@@ -20,6 +20,12 @@ interface NextLiveProps {
   skipPaths?: string[];
 }
 
+interface VersionInfo {
+  currentVersion: string;
+  latestVersion: string | null;
+  needsUpdate: boolean;
+}
+
 const GeminiIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28" fill="none">
     <path d="M14 28C14 26.0633 13.6267 24.2433 12.88 22.54C12.1567 20.8367 11.165 19.355 9.905 18.095C8.645 16.835 7.16333 15.8433 5.46 15.12C3.75667 14.3733 1.93667 14 0 14C1.93667 14 3.75667 13.6383 5.46 12.915C7.16333 12.1683 8.645 11.165 9.905 9.905C11.165 8.645 12.1567 7.16333 12.88 5.46C13.6267 3.75667 14 1.93667 14 0C14 1.93667 14.3617 3.75667 15.085 5.46C15.8317 7.16333 16.835 8.645 18.095 9.905C19.355 11.165 20.8367 12.1683 22.54 12.915C24.2433 13.6383 26.0633 14 28 14C26.0633 14 24.2433 14.3733 22.54 15.12C20.8367 15.8433 19.355 16.835 18.095 18.095C16.835 19.355 15.8317 20.8367 15.085 22.54C14.3617 24.2433 14 26.0633 14 28Z" fill="url(#paint0_radial_16771_53212)"/>
@@ -187,6 +193,11 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
   const [editorContent, setEditorContent] = useState('');
   const [editorLanguage, setEditorLanguage] = useState('typescript');
   const [currentFilePath, setCurrentFilePath] = useState('');
+  const [versionInfo, setVersionInfo] = useState<VersionInfo>({
+    currentVersion: "1.0-alpha-release:re3sadv",
+    latestVersion: null,
+    needsUpdate: false
+  });
 
   const toggleChat = () => {
     setIsVisible(prev => !prev);
@@ -229,94 +240,15 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
     }
   };
 
-  const handleSendMessage = (content: string) => {
-    let messageType: 'text' | 'image' | 'ai' = 'text';
-    
-    if (content.startsWith('data:image')) {
-      messageType = 'image';
-    } else if (content.includes('```')) {
-      messageType = 'ai';
-    }
-
-    // Determine if this is a code edit message
-    const isCodeEditMessage = content.includes('```') && (
-      content.includes("I'll help you modify the code") ||
-      content.includes("Here's what I'll do") ||
-      content.includes("I will modify") ||
-      content.includes("I will update") ||
-      content.includes("I will change")
-    );
-
-    if (isCodeEditMessage) {
-      // Extract code blocks
-      const codeBlocks = content.match(/```[\s\S]*?```/g);
-      if (codeBlocks && codeBlocks.length >= 2) {
-        // Process code blocks in pairs
-        for (let i = 0; i < codeBlocks.length; i += 2) {
-          const originalBlock = codeBlocks[i];
-          const modifiedBlock = codeBlocks[i + 1];
-          
-          if (originalBlock && modifiedBlock) {
-            const originalLines = originalBlock.split('\n');
-            const modifiedLines = modifiedBlock.split('\n');
-            
-            const originalFirstLine = originalLines[0].replace('```', '').trim();
-            const modifiedFirstLine = modifiedLines[0].replace('```', '').trim();
-            
-            const originalParts = originalFirstLine.split(':');
-            const modifiedParts = modifiedFirstLine.split(':');
-            
-            if (originalParts.length >= 3 && modifiedParts.length >= 3) {
-              const filepath = originalParts[1];
-              const lineNumbers = originalParts[2];
-              const modifiedCode = modifiedLines.slice(1, -1).join('\n');
-              
-              handleCodeEdit({
-                filepath: filepath.trim(),
-                lineNumbers: lineNumbers.trim(),
-                code: modifiedCode.trim()
-              });
-            }
-          }
-        }
+  const handleSendMessage = (message: Message) => {
+    // Replace the last message if it was a loading message
+    setMessages(prev => {
+      const lastMessage = prev[prev.length - 1];
+      if (lastMessage?.isLoading) {
+        return [...prev.slice(0, -1), message];
       }
-      
-      // Process content for display
-      const processedContent = content.replace(/```([\s\S]*?)```/g, (match, codeContent) => {
-        const lines = codeContent.split('\n');
-        const firstLine = lines[0].trim();
-        const parts = firstLine.split(':');
-        
-        if (parts.length >= 3) {
-          const filepath = parts[1];
-          const blockId = Math.random().toString(36).substring(7);
-          const code = lines.slice(1).join('\n');
-          
-          codeBlocksDataRef.current.set(blockId, {
-            filepath: filepath.trim(),
-            lineNumbers: parts[2].trim(),
-            code: code.trim(),
-            language: filepath.split('.').pop() || 'plaintext'
-          });
-          
-          return `<div class="code-block" data-block-id="${blockId}"></div>`;
-        }
-        return match;
-      });
-      
-      setMessages(prev => [...prev, { 
-        type: 'ai', 
-        content: processedContent,
-        isLoading: false
-      }]);
-    } else {
-      setMessages(prev => [...prev, { 
-        type: messageType, 
-        content,
-        isLoading: false
-      }]);
-    }
-    
+      return [...prev, message];
+    });
     setIsSidePanel(true);
   };
 
@@ -523,9 +455,9 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
     // Enable accessibility support
     accessibilitySupport: 'auto',
     // Enable cursor blinking
-    cursorBlinking: 'smooth',
+    cursorBlinking: 'smooth' as const,
     // Enable cursor style
-    cursorStyle: 'line',
+    cursorStyle: 'line' as const,
     // Enable cursor width
     cursorWidth: 2,
     // Enable font ligatures
@@ -534,8 +466,8 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
     renderWhitespace: 'selection',
     // Enable scrollbar
     scrollbar: {
-      vertical: 'visible',
-      horizontal: 'visible',
+      vertical: 'visible' as const,
+      horizontal: 'visible' as const,
       useShadows: false,
       verticalHasArrows: false,
       horizontalHasArrows: false,
@@ -545,22 +477,52 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
     }
   };
 
+  // Add version check effect
+  useEffect(() => {
+    const checkVersion = async () => {
+      try {
+        const response = await fetch('https://api.github.com/repos/next-live/nextlive/releases/latest');
+        if (response.ok) {
+          const data = await response.json();
+          const latestVersion = data.tag_name.replace('v', '');
+          const needsUpdate = latestVersion !== config.version;
+          setVersionInfo({
+            currentVersion: config.version,
+            latestVersion,
+            needsUpdate
+          });
+        }
+      } catch (error) {
+        console.error('Error checking version:', error);
+      }
+    };
+
+    checkVersion();
+  }, []);
+
   return (
     <div className="next-live flex w-full h-screen">
       <div className={`transition-all duration-300 ease-in-out ${isSidePanel ? `w-[calc(100%-${panelWidth}px)]` : 'w-full'}`}>
         {children}
       </div>
       <button
-        className="fixed bottom-8 cursor-pointer right-8 bg-white hover:bg-gray-50 rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 hover:shadow-xl"
+        className={`fixed bottom-8 cursor-pointer right-8 rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 hover:shadow-xl ${
+          versionInfo.needsUpdate ? 'bg-red-500 hover:bg-red-600 text-white w-48' : ' bg-white hover:bg-gray-50'
+        }`}
         onClick={toggleChat}
         style={{
           opacity: isVisible && !isSidePanel ? 0 : 1,
           pointerEvents: isVisible && !isSidePanel ? 'none' : 'auto'
         }}
       >
-        <GeminiIcon />
+        <div className="flex items-center justify-center gap-2">
+          <img src="/nextlive.ico" className="w-10 h-10" />
+          {versionInfo.needsUpdate && (
+            <span className="text-sm font-medium">Update Available!</span>
+          )}
+        </div>
       </button>
-      <button
+      {/* <button
         className="fixed bottom-8 cursor-pointer right-24 bg-white hover:bg-gray-50 rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 hover:shadow-xl"
         onClick={handleOpenEditor}
         style={{
@@ -569,7 +531,7 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
         }}
       >
         <EditorIcon />
-      </button>
+      </button> */}
       {isTakingScreenshot && (
         <div className="fixed inset-0 pointer-events-none z-50">
           <div className="absolute inset-0 border-[3px] border-transparent animate-[screenshot-border_3s_ease-in-out_forwards]"></div>
@@ -589,9 +551,8 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
         themeStyle="glassmorphism"
         onWidthChange={setPanelWidth}
         initialPosition={{ x: getInitialPosition().x, y: getInitialPosition().y }}
-        
       />
-      <GeminiVoiceChat apiKey={process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''} />
+      {/* <GeminiVoiceChat apiKey={process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''} /> */}
 
       <Dialog
         open={showEditor}
@@ -624,7 +585,14 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
               height="100%"
               defaultLanguage={editorLanguage}
               value={editorContent}
-              options={editorOptions}
+              options={{
+                ...editorOptions,
+                scrollbar: {
+                  ...editorOptions.scrollbar,
+                  vertical: 'visible' as const,
+                  horizontal: 'visible' as const
+                }
+              }}
             />
           </Box>
         </DialogContent>
