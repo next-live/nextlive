@@ -40,28 +40,30 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Notify on success
+      - name: Create Release Note on Success
         if: success()
         uses: actions/github-script@v7
         with:
           script: |
             const version = '${{ github.ref_name }}' || '${{ github.event.inputs.version }}';
-            await github.rest.issues.createComment({
+            await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              tag_name: version,
+              name: `Release ${version}`,
               body: `Successfully published @next-live/nextlive@${version} to npm!`
             });
 
-      - name: Notify on failure
+      - name: Create Release Note on Failure
         if: failure()
         uses: actions/github-script@v7
         with:
           script: |
             const version = '${{ github.ref_name }}' || '${{ github.event.inputs.version }}';
-            await github.rest.issues.createComment({
+            await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              tag_name: version,
+              name: `Release ${version}`,
               body: `Failed to publish @next-live/nextlive@${version} to npm. Check the [workflow run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`
             }); 

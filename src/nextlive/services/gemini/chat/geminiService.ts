@@ -169,7 +169,7 @@ export class GeminiService extends EventEmitter {
             throw new Error(data.error || 'Failed to edit file');
           }
 
-          this.chatHistory.push({ role: 'model', parts: [{ text: '', functionCall: funcCall }] });
+          this.chatHistory.push({ role: 'model', parts: [{ functionCall: funcCall }] });
           this.chatHistory.push({ 
             role: 'user', 
             name: funcCall.name, 
@@ -206,8 +206,7 @@ export class GeminiService extends EventEmitter {
         const data = await res.json();
         const content = data.content || data.error || '';
         console.log('File content:', content);
-
-        this.chatHistory.push({ role: 'model', parts: [{ text: '', functionCall: funcCall }] });
+        
         this.chatHistory.push({ role: 'user', name: funcCall.name, parts: [{ text: content }] });
       }
 

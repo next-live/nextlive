@@ -50,7 +50,7 @@ function buildFileTree(dir: string, basePath: string = ''): FileNode[] {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { filepath, operation, lineNumbers, code, path: listPath } = body;
+    let { filepath, operation, lineNumbers, code, path: listPath } = body;
     const filepaths = filepath.replace('@','')
 
     if (operation === 'list') {
@@ -90,20 +90,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ content });
 
       case 'write':
-        try {
-          console.log(absolutePath);
-          if(!code) return NextResponse.json({ error: 'No code provided' }, { status: 400 });
-          if(!path) return NextResponse.json({ error: 'No path provided' }, { status: 400 });
-          if(!fs.existsSync(path.dirname(absolutePath))) {
-            fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
-          }
-          fs.writeFileSync(absolutePath, code)
-          return NextResponse.json({ success: true });
-        } catch {
-          console.error('Error writing file');
-          return NextResponse.json({ error: 'Failed to write file' }, { status: 500 });
-        }
-      case 'edit':
         // Create directory if it doesn't exist
         fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
 

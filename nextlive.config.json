@@ -1,7 +1,9 @@
 {
-    "theme": "light",
-    "chatType":"geminiVoiceChat",
-    "chatTheme":"glassmorhism",
-    "version": "1.0.0",
-    "githubRepo": "https://api.github.com/repos/nextlive/nextlive/releases/latest"
+  "theme": "dark",
+  "chatType": "geminiVoiceChat",
+  "chatTheme": "glassmorhism",
+  "version": "1.0.0",
+  "githubRepo": "https://api.github.com/repos/nextlive/nextlive/releases/latest",
+  "themeStyle": "glassmorphism",
+  "geminiApiKey": "NEXT_PUBLIC_GEMINI_API_KEY=AIzaSyBtTdeRokJKIAFuGjd1PgiviVO3AX1RYuw"
 }
