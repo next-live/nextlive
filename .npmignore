@@ -7,7 +7,7 @@
 .DS_Store
 
 # Source
-src
+src/app
 !src/index.ts
 
 # Config files
