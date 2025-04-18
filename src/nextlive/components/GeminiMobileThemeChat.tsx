@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, FC } from 'react';
-import { Box, Typography, IconButton, Paper, InputBase, CircularProgress, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
+import React, { useState, useEffect, useRef, FC, ReactNode } from 'react';
+import { Box, Typography, IconButton, Paper, InputBase, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 import { 
   Close as CloseIcon,  
   PhotoCamera as CameraIcon,
@@ -17,6 +17,9 @@ import {
   Settings as ConfigIcon,
   Search,
   Article as YamlIcon,
+  SmartToy as ModelIcon,
+  History as HistoryIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -54,6 +57,7 @@ interface GeminiMobileThemeChatProps {
   themeStyle?: ThemeStyle;
   initialPosition?: { x: number; y: number };
   isMovable?: boolean;
+  defaultModel?: string;
 }
 
 // Add interface for file structure
@@ -62,12 +66,90 @@ interface FileStructure {
   children?: Record<string, FileStructure>;
 }
 
+// Add interface for saved chat
+interface SavedChat {
+  id: string;
+  model: string;
+  messages: any[];
+  timestamp: string;
+}
+
+interface ChatMessage {
+  role: 'user' | 'model';
+  parts: Array<{ text: string }>;
+}
+
 // Add EditorIcon component
 const EditorIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
     <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
   </svg>
 );
+
+// Add this after your existing interfaces
+interface Model {
+  id: string;
+  name: string;
+  description: string;
+}
+
+const AVAILABLE_MODELS: Model[] = [
+  {
+    id: 'gemini-2.5-flash-preview-04-17',
+    name: 'Gemini 2.5 Flash Preview',
+    description: 'Adaptive thinking, cost efficiency'
+  },
+  {
+    id: 'gemini-2.5-pro-preview-03-25',
+    name: 'Gemini 2.5 Pro Preview',
+    description: 'Enhanced thinking and reasoning, multimodal understanding, advanced coding'
+  },
+  {
+    id: 'gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
+    description: 'Next generation features, speed, thinking, realtime streaming, and multimodal generation'
+  },
+  {
+    id: 'gemini-2.0-flash-lite',
+    name: 'Gemini 2.0 Flash-Lite',
+    description: 'Cost efficiency and low latency'
+  },
+  {
+    id: 'gemini-1.5-flash',
+    name: 'Gemini 1.5 Flash',
+    description: 'Fast and versatile performance across diverse tasks'
+  },
+  {
+    id: 'gemini-1.5-flash-8b',
+    name: 'Gemini 1.5 Flash-8B',
+    description: 'High volume and lower intelligence tasks'
+  },
+  {
+    id: 'gemini-1.5-pro',
+    name: 'Gemini 1.5 Pro',
+    description: 'Complex reasoning tasks requiring more intelligence'
+  },
+  {
+    id: 'gemini-embedding-exp',
+    name: 'Gemini Embedding',
+    description: 'Measuring the relatedness of text strings'
+  },
+  {
+    id: 'imagen-3.0-generate-002',
+    name: 'Imagen 3',
+    description: 'Most advanced image generation model'
+  },
+  {
+    id: 'veo-2.0-generate-001',
+    name: 'Veo 2',
+    description: 'High quality video generation'
+  },
+  {
+    id: 'gemini-2.0-flash-live-001',
+    name: 'Gemini 2.0 Flash Live',
+    description: 'Low-latency bidirectional voice and video interactions'
+  }
+];
 
 const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({ 
   onClose, 
@@ -83,14 +165,14 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
   themeStyle = 'default',
   initialPosition = { x: 0, y: 0 },
   isMovable = false,
-}) => {
+  defaultModel = 'gemini-pro'
+}): React.ReactElement => {
   const [message, setMessage] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>(parentMessages);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-const [files, setFiles] = useState<string[]>([]);
-const [selectedFile, setSelectedFile] = useState<string | null>(null);
-const [isLoadingFiles, setIsLoadingFiles] = useState(false);
-
+  const [files, setFiles] = useState<string[]>([]);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [screenshotData, setScreenshotData] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState<boolean>(false);
@@ -102,15 +184,26 @@ const [isLoadingFiles, setIsLoadingFiles] = useState(false);
   const [editorLanguage, setEditorLanguage] = useState('typescript');
   const [editorContent, setEditorContent] = useState('');
   // Add to your state variables
-const [showFileDropdown, setShowFileDropdown] = useState(false);
-const [filteredFiles, setFilteredFiles] = useState<string[]>([]);
-const [searchTerm, setSearchTerm] = useState('');
-const [cursorPosition, setCursorPosition] = useState<number>(0);
-const inputRef = useRef<HTMLInputElement>(null);
-const [currentStatus, setCurrentStatus] = useState<string>('');
-const [showFileSuggestions, setShowFileSuggestions] = useState(false);
-const [suggestedFiles, setSuggestedFiles] = useState<string[]>([]);
-const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showFileDropdown, setShowFileDropdown] = useState(false);
+  const [filteredFiles, setFilteredFiles] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [cursorPosition, setCursorPosition] = useState<number>(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [currentStatus, setCurrentStatus] = useState<string>('');
+  const [showFileSuggestions, setShowFileSuggestions] = useState(false);
+  const [suggestedFiles, setSuggestedFiles] = useState<string[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [selectedModel, setSelectedModel] = useState<string>(defaultModel);
+  const [showModelSelector, setShowModelSelector] = useState<boolean>(false);
+  const [fileMentions, setFileMentions] = useState<Array<{start: number; end: number; file: string}>>([]);
+  // Add ref for messages container
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Add state for chat history
+  const [savedChats, setSavedChats] = useState<SavedChat[]>([]);
+  const [showChatHistory, setShowChatHistory] = useState<boolean>(false);
+  const [isLoadingChats, setIsLoadingChats] = useState<boolean>(false);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
   const isDark = theme === 'dark';
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -118,7 +211,20 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
     setMessage(value);
     setCursorPosition(e.target.selectionStart || 0);
 
-    // Check if we should show file suggestions
+    // Track file mentions
+    const mentions: Array<{start: number; end: number; file: string}> = [];
+    const regex = /@([^\s]+)/g;
+    let match;
+    while ((match = regex.exec(value)) !== null) {
+      mentions.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        file: match[1]
+      });
+    }
+    setFileMentions(mentions);
+
+    // Check for file suggestions
     const textBeforeCursor = value.substring(0, e.target.selectionStart || 0);
     const lastAtSymbol = textBeforeCursor.lastIndexOf('@');
     
@@ -132,6 +238,12 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
       setShowFileSuggestions(true);
     } else {
       setShowFileSuggestions(false);
+    }
+
+    // Adjust textarea height if needed
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   };
 
@@ -650,462 +762,919 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
     }
   };
 
-  const renderInputArea = () => (
-    <Box sx={{ 
-      p: 2, 
-      borderTop: `1px solid ${themeStyles.borderColor}`,
-      backgroundColor: themeStyles.backgroundColor,
-      position: 'relative',
-    }}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {screenshotData && (
-          <Box sx={{ 
-            position: 'relative',
-            maxWidth: '200px',
-            borderRadius: 1,
-            overflow: 'hidden'
-          }}>
-            <Image
-              src={screenshotData}
-              alt="Screenshot preview"
-              width={300}
-              height={200}
-              style={{ 
-                width: '100%',
-                height: 'auto',
-                display: 'block'
-              }}
-            />
-            <IconButton
-              size="small"
-              onClick={() => setScreenshotData(null)}
-              sx={{
-                position: 'absolute',
-                top: 8,
-                right: 8,
-                backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)',
-                color: 'white',
+  const handleModelSelect = (modelId: string) => {
+    setSelectedModel(modelId);
+    setShowModelSelector(false);
+    geminiService.setModel(modelId);
+  };
+
+  const renderModelSelector = () => (
+    <Paper
+      elevation={0}
+      sx={{
+        position: 'absolute',
+        bottom: '100%',
+        right: 0,
+        width: '280px',
+        marginBottom: '8px',
+        ...grassmorphismStyles,
+        borderRadius: '12px',
+        zIndex: 1000,
+        backgroundColor: isDark ? 'rgb(30, 30, 30)' : 'rgb(255, 255, 255)',
+        overflow: 'hidden'
+      }}
+    >
+      <Box sx={{ p: 2, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
+        <Typography
+          sx={{
+            fontSize: '14px',
+            fontWeight: 500,
+            color: isDark ? '#e1e1e1' : '#333',
+          }}
+        >
+          Select Model
+        </Typography>
+      </Box>
+      <Box sx={{
+        maxHeight: '300px',
+        overflowY: 'auto',
+        '&::-webkit-scrollbar': {
+          width: '4px',
+          background: 'transparent'
+        },
+        '&::-webkit-scrollbar-track': {
+          background: 'transparent'
+        },
+        '&::-webkit-scrollbar-thumb': {
+          background: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+          borderRadius: '4px',
+          '&:hover': {
+            background: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'
+          }
+        }
+      }}>
+        {AVAILABLE_MODELS.map((model) => (
+          <MenuItem
+            key={model.id}
+            onClick={() => handleModelSelect(model.id)}
+            selected={selectedModel === model.id}
+            sx={{
+              py: 1.5,
+              px: 2,
+              '&:hover': {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+              },
+              '&.Mui-selected': {
+                backgroundColor: isDark ? 'rgba(78, 205, 196, 0.15)' : 'rgba(26, 115, 232, 0.08)',
                 '&:hover': {
-                  backgroundColor: isDark ? 'rgba(0,0,0,0.9)' : 'rgba(0,0,0,0.7)'
+                  backgroundColor: isDark ? 'rgba(78, 205, 196, 0.25)' : 'rgba(26, 115, 232, 0.12)',
+                }
+              }
+            }}
+          >
+            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+              <Typography
+                sx={{
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  color: isDark ? '#e1e1e1' : '#333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1
+                }}
+              >
+                <ModelIcon sx={{ 
+                  fontSize: '16px',
+                  color: selectedModel === model.id 
+                    ? (isDark ? '#4ECDC4' : '#1a73e8')
+                    : (isDark ? 'rgba(255,255,255,0.7)' : '#5f6368')
+                }} />
+                {model.name}
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: '12px',
+                  color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+                  mt: 0.5
+                }}
+              >
+                {model.description}
+              </Typography>
+            </Box>
+          </MenuItem>
+        ))}
+      </Box>
+    </Paper>
+  );
+
+  const renderStyledMessage = (): ReactNode => {
+    if (fileMentions.length === 0) return message;
+
+    let lastIndex = 0;
+    const parts: ReactNode[] = [];
+
+    fileMentions.forEach(({start, end, file}, index) => {
+      // Add text before the mention
+      if (start > lastIndex) {
+        parts.push(
+          <span key={`text-${index}`}>
+            {message.slice(lastIndex, start)}
+          </span>
+        );
+      }
+
+      // Add the styled mention
+      parts.push(
+        <span
+          key={`mention-${index}`}
+          style={{
+            backgroundColor: isDark ? 'rgba(26, 115, 232, 0.3)' : 'rgba(26, 115, 232, 0.1)',
+            color: isDark ? '#4ECDC4' : '#1a73e8',
+            padding: '2px 4px',
+            borderRadius: '4px',
+            margin: '0 1px',
+          }}
+        >
+          @{file}
+        </span>
+      );
+
+      lastIndex = end;
+    });
+
+    // Add any remaining text
+    if (lastIndex < message.length) {
+      parts.push(
+        <span key="text-end">
+          {message.slice(lastIndex)}
+        </span>
+      );
+    }
+
+    return <>{parts}</>;
+  };
+
+  // Add function to load saved chats
+  const loadSavedChats = async () => {
+    try {
+      setIsLoadingChats(true);
+      const chats = await geminiService.listSavedChats();
+      setSavedChats(chats);
+    } catch (error) {
+      console.error('Error loading saved chats:', error);
+    } finally {
+      setIsLoadingChats(false);
+    }
+  };
+
+  // Add function to load a specific chat
+  const loadChat = async (chatId: string) => {
+    try {
+      const success = await geminiService.loadChatHistory(chatId);
+      if (success) {
+        setCurrentChatId(chatId);
+        setShowChatHistory(false);
+        // Convert the chat history to the format expected by the component
+        const formattedMessages = geminiService.getChatHistory().map((msg: ChatMessage) => {
+          if (msg.role === 'user') {
+            return {
+              type: 'text',
+              content: msg.parts[0].text
+            };
+          } else if (msg.role === 'model') {
+            return {
+              type: 'ai',
+              content: msg.parts[0].text
+            };
+          }
+          return null;
+        }).filter(Boolean) as Message[];
+        
+        // Set messages and update panel state
+        setMessages(formattedMessages);
+        setIsVisible(true);
+        
+        // If not already in side panel mode, convert to side panel
+        if (!isSidePanel) {
+          onWidthChange?.(350); // Set default width for side panel
+        }
+      }
+    } catch (error) {
+      console.error('Error loading chat:', error);
+    }
+  };
+
+  // Add function to delete a chat
+  const deleteChat = async (chatId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    try {
+      const success = await geminiService.deleteChat(chatId);
+      if (success) {
+        setSavedChats(prevChats => prevChats.filter(chat => chat.id !== chatId));
+        if (currentChatId === chatId) {
+          setCurrentChatId(null);
+          setMessages([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+    }
+  };
+
+  // Add function to start a new chat
+  const startNewChat = () => {
+    geminiService.reset();
+    setCurrentChatId(null);
+    setMessages([]);
+    setShowChatHistory(false);
+    
+    // Ensure the chat is visible when starting a new one
+    setIsVisible(true);
+    
+    // If not already in side panel mode, convert to side panel
+    if (!isSidePanel) {
+      onWidthChange?.(350); // Set default width for side panel
+    }
+  };
+
+  // Load saved chats when component mounts
+  useEffect(() => {
+    loadSavedChats();
+  }, []);
+
+  const renderChatHistory = () => (
+    <Paper
+      elevation={0}
+      sx={{
+        position: 'absolute',
+        bottom: '100%',
+        right: 0,
+        width: '280px',
+        marginBottom: '8px',
+        ...grassmorphismStyles,
+        borderRadius: '12px',
+        zIndex: 1000,
+        backgroundColor: isDark ? 'rgb(30, 30, 30)' : 'rgb(255, 255, 255)',
+        overflow: 'hidden'
+      }}
+    >
+      <Box sx={{ p: 2, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
+        <Typography
+          sx={{
+            fontSize: '14px',
+            fontWeight: 500,
+            color: isDark ? '#e1e1e1' : '#333',
+          }}
+        >
+          Chat History
+        </Typography>
+      </Box>
+      <Box sx={{
+        maxHeight: '300px',
+        overflowY: 'auto',
+        '&::-webkit-scrollbar': {
+          width: '4px',
+          background: 'transparent'
+        },
+        '&::-webkit-scrollbar-track': {
+          background: 'transparent'
+        },
+        '&::-webkit-scrollbar-thumb': {
+          background: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+          borderRadius: '4px',
+          '&:hover': {
+            background: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'
+          }
+        }
+      }}>
+        <MenuItem
+          onClick={startNewChat}
+          sx={{
+            py: 1.5,
+            px: 2,
+            '&:hover': {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+            },
+            '&.Mui-selected': {
+              backgroundColor: isDark ? 'rgba(78, 205, 196, 0.15)' : 'rgba(26, 115, 232, 0.08)',
+              '&:hover': {
+                backgroundColor: isDark ? 'rgba(78, 205, 196, 0.25)' : 'rgba(26, 115, 232, 0.12)',
+              }
+            }
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <Typography
+              sx={{
+                fontSize: '14px',
+                fontWeight: 500,
+                color: isDark ? '#4ECDC4' : '#1a73e8',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1
+              }}
+            >
+              <HistoryIcon sx={{ fontSize: '16px' }} />
+              New Chat
+            </Typography>
+          </Box>
+        </MenuItem>
+        
+        {isLoadingChats ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : savedChats.length === 0 ? (
+          <Box sx={{ p: 2, textAlign: 'center' }}>
+            <Typography
+              sx={{
+                fontSize: '14px',
+                color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+              }}
+            >
+              No saved chats
+            </Typography>
+          </Box>
+        ) : (
+          savedChats.map((chat) => (
+            <MenuItem
+              key={chat.id}
+              onClick={() => loadChat(chat.id)}
+              selected={currentChatId === chat.id}
+              sx={{
+                py: 1.5,
+                px: 2,
+                '&:hover': {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+                },
+                '&.Mui-selected': {
+                  backgroundColor: isDark ? 'rgba(78, 205, 196, 0.15)' : 'rgba(26, 115, 232, 0.08)',
+                  '&:hover': {
+                    backgroundColor: isDark ? 'rgba(78, 205, 196, 0.25)' : 'rgba(26, 115, 232, 0.12)',
+                  }
                 }
               }}
             >
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          </Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography
+                    sx={{
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      color: isDark ? '#e1e1e1' : '#333',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1
+                    }}
+                  >
+                    <HistoryIcon sx={{ 
+                      fontSize: '16px',
+                      color: currentChatId === chat.id 
+                        ? (isDark ? '#4ECDC4' : '#1a73e8')
+                        : (isDark ? 'rgba(255,255,255,0.7)' : '#5f6368')
+                    }} />
+                    {new Date(chat.timestamp).toLocaleString()}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => deleteChat(chat.id, e)}
+                    sx={{
+                      color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+                      '&:hover': {
+                        color: isDark ? '#ff6b6b' : '#d32f2f',
+                      }
+                    }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+                <Typography
+                  sx={{
+                    fontSize: '12px',
+                    color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+                    mt: 0.5,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {chat.messages.length > 0 
+                    ? chat.messages[0].parts[0].text.substring(0, 50) + (chat.messages[0].parts[0].text.length > 50 ? '...' : '')
+                    : 'Empty chat'}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: '11px',
+                    color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+                    mt: 0.5
+                  }}
+                >
+                  Model: {chat.model}
+                </Typography>
+              </Box>
+            </MenuItem>
+          ))
         )}
-        <Box sx={{ position: 'relative', width: '100%' }}>
-          <InputBase
-            fullWidth
-            multiline
-            placeholder="Type a message... (Type @ to mention files)"
-            value={message}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            disabled={isProcessing}
-            inputRef={textareaRef}
-            sx={{ 
-              fontSize: '16px',
-              color: themeStyles.color,
-              '&::placeholder': {
-                color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
-              },
-            }}
-          />
-          
-          {showFileSuggestions && suggestedFiles.length > 0 && (
-            <Paper
-              elevation={0}
+      </Box>
+    </Paper>
+  );
+
+  const renderInputArea = (): React.ReactElement => {
+    const preserveSpaces = (text: string): string => {
+      return text.replace(/ /g, '\u00A0');
+    };
+
+    return (
+      <Box sx={{ 
+        p: 2, 
+        borderTop: `1px solid ${themeStyles.borderColor}`,
+        backgroundColor: themeStyles.backgroundColor,
+        position: 'relative',
+      }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ position: 'relative', width: '100%' }}>
+            {/* Main input container */}
+            <Box
               sx={{
-                position: 'absolute',
-                bottom: '100%',
-                left: 0,
-                width: '100%',
-                maxHeight: '200px',
-                marginBottom: '8px',
-                ...grassmorphismStyles,
-                borderRadius: '12px',
-                zIndex: 1000,
+                position: 'relative',
+                backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.04)',
+                borderRadius: '8px',
+                minHeight: '40px',
                 display: 'flex',
-                flexDirection: 'column',
-                backgroundColor: isDark ? 'rgb(30, 30, 30)' : 'rgb(255, 255, 255)',
+                flexDirection: 'column'
               }}
             >
+              {/* Hidden mirror div for measuring text */}
               <Box
                 sx={{
-                  flex: 1,
-                  overflowY: 'auto',
-                  '&::-webkit-scrollbar': {
-                    width: '4px',
-                    background: 'transparent'
-                  },
-                  '&::-webkit-scrollbar-track': {
-                    background: 'transparent'
-                  },
-                  '&::-webkit-scrollbar-thumb': {
-                    background: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+                  visibility: 'hidden',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  padding: '8px 12px',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word',
+                  fontFamily: 'inherit',
+                  fontSize: '16px',
+                  lineHeight: '1.5',
+                  minHeight: '40px',
+                }}
+                ref={textareaRef}
+              >
+                {preserveSpaces(message + ' ')}
+              </Box>
+
+              {/* Highlighting layer */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  padding: '8px 12px',
+                  pointerEvents: 'none',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word',
+                  fontFamily: 'inherit',
+                  fontSize: '16px',
+                  lineHeight: '1.5',
+                  color: 'transparent',
+                  minHeight: '40px',
+                  '& .mention': {
+                    backgroundColor: isDark ? 'rgba(26, 115, 232, 0.3)' : 'rgba(26, 115, 232, 0.1)',
+                    color: isDark ? '#4ECDC4' : '#1a73e8',
+                    padding: '2px 4px',
                     borderRadius: '4px',
-                    '&:hover': {
-                      background: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'
-                    }
-                  },
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: `${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'} transparent`,
+                    margin: '0 1px',
+                  }
                 }}
               >
-                {suggestedFiles.map((file, index) => {
-                  const fileName = file.split('/').pop() || file;
-                  const filePath = file.split('/').slice(0, -1).join('/');
-                  
-                  return (
-                    <MenuItem
-                      key={file}
-                      onClick={() => handleFileSelect(file)}
-                      sx={{
-                        py: 0.75,
-                        px: 1,
-                        minHeight: '32px',
-                        '&:hover': {
-                          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
-                        },
-                        '&.Mui-focused': {
-                          backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
-                        }
-                      }}
-                    >
-                      <Box sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center',
-                        width: '100%',
-                        gap: 1
-                      }}>
+                {message.split(/(@\S+)/).map((part, index) => {
+                  if (part.startsWith('@')) {
+                    return <span key={index} className="mention">{preserveSpaces(part)}</span>;
+                  }
+                  return <span key={index}>{preserveSpaces(part)}</span>;
+                })}
+              </Box>
+
+              {/* Actual input */}
+              <InputBase
+                fullWidth
+                multiline
+                placeholder="Type a message... (Type @ to mention files)"
+                value={message}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                disabled={isProcessing}
+                sx={{ 
+                  padding: '8px 12px',
+                  fontSize: '16px',
+                  lineHeight: '1.5',
+                  color: isDark ? '#ffffff' : '#333',
+                  backgroundColor: 'transparent',
+                  position: 'relative',
+                  flex: 1,
+                  '& .MuiInputBase-input': {
+                    padding: 0,
+                    fontFamily: 'inherit',
+                    fontSize: '16px',
+                    lineHeight: '1.5',
+                    color: 'inherit',
+                    caretColor: isDark ? '#ffffff' : '#333',
+                  },
+                  '&::placeholder': {
+                    color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+                    opacity: 1,
+                  },
+                  '& textarea': {
+                    resize: 'none',
+                  }
+                }}
+              />
+            </Box>
+
+            {/* Dropdowns */}
+            {showModelSelector && renderModelSelector()}
+            {showFileSuggestions && suggestedFiles.length > 0 && (
+              <Paper
+                elevation={0}
+                sx={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: 0,
+                  width: '100%',
+                  maxHeight: '200px',
+                  marginBottom: '8px',
+                  ...grassmorphismStyles,
+                  borderRadius: '12px',
+                  zIndex: 1000,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  backgroundColor: isDark ? 'rgb(30, 30, 30)' : 'rgb(255, 255, 255)',
+                }}
+              >
+                <Box
+                  sx={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    '&::-webkit-scrollbar': {
+                      width: '4px',
+                      background: 'transparent'
+                    },
+                    '&::-webkit-scrollbar-track': {
+                      background: 'transparent'
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      background: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+                      borderRadius: '4px',
+                      '&:hover': {
+                        background: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'
+                      }
+                    },
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: `${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'} transparent`,
+                  }}
+                >
+                  {suggestedFiles.map((file, index) => {
+                    const fileName = file.split('/').pop() || file;
+                    const filePath = file.split('/').slice(0, -1).join('/');
+                    
+                    return (
+                      <MenuItem
+                        key={file}
+                        onClick={() => handleFileSelect(file)}
+                        sx={{
+                          py: 0.75,
+                          px: 1,
+                          minHeight: '32px',
+                          '&:hover': {
+                            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+                          },
+                          '&.Mui-focused': {
+                            backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+                          }
+                        }}
+                      >
                         <Box sx={{ 
-                          display: 'flex',
+                          display: 'flex', 
                           alignItems: 'center',
-                          minWidth: '20px'
+                          width: '100%',
+                          gap: 1
                         }}>
-                          {getFileIcon(fileName)}
-                        </Box>
-                        <Box sx={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          flex: 1,
-                          overflow: 'hidden'
-                        }}>
-                          <Typography
-                            sx={{
-                              fontSize: '13px',
-                              fontWeight: 400,
-                              color: isDark ? '#e1e1e1' : '#333',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
-                            }}
-                          >
-                            {fileName}
-                          </Typography>
-                          {filePath && (
+                          <Box sx={{ 
+                            display: 'flex',
+                            alignItems: 'center',
+                            minWidth: '20px'
+                          }}>
+                            {getFileIcon(fileName)}
+                          </Box>
+                          <Box sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            flex: 1,
+                            overflow: 'hidden'
+                          }}>
                             <Typography
                               sx={{
-                                fontSize: '11px',
-                                color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+                                fontSize: '13px',
+                                fontWeight: 400,
+                                color: isDark ? '#e1e1e1' : '#333',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis'
                               }}
                             >
-                              {filePath}
+                              {fileName}
                             </Typography>
-                          )}
+                            {filePath && (
+                              <Typography
+                                sx={{
+                                  fontSize: '11px',
+                                  color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}
+                              >
+                                {filePath}
+                              </Typography>
+                            )}
+                          </Box>
                         </Box>
-                      </Box>
-                    </MenuItem>
-                  );
-                })}
-              </Box>
-              <Box
-                sx={{
-                  p: 1,
-                  borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-                  backgroundColor: isDark ? 'rgb(37, 37, 38)' : 'rgb(243, 243, 243)',
-                }}
-              >
+                      </MenuItem>
+                    );
+                  })}
+                </Box>
                 <Box
                   sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    backgroundColor: isDark ? 'rgb(60, 60, 60)' : 'rgb(255, 255, 255)',
-                    borderRadius: '3px',
-                    padding: '4px 8px',
+                    p: 1,
+                    borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                    backgroundColor: isDark ? 'rgb(37, 37, 38)' : 'rgb(243, 243, 243)',
                   }}
                 >
-                  <Search sx={{ 
-                    fontSize: '16px', 
-                    mr: 1, 
-                    color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' 
-                  }} />
-                  <InputBase
-                    placeholder="Search files..."
-                    value={searchTerm}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSearchTerm(value);
-                      const filtered = files.filter(file => 
-                        file.toLowerCase().includes(value.toLowerCase()) || 
-                        file.split('/').pop()?.toLowerCase().includes(value.toLowerCase())
-                      );
-                      setSuggestedFiles(filtered.slice(0, 5));
-                    }}
+                  <Box
                     sx={{
-                      flex: 1,
-                      fontSize: '13px',
-                      color: isDark ? '#e1e1e1' : '#333',
-                      '& input::placeholder': {
-                        color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
-                        opacity: 1,
-                        fontSize: '13px',
-                      },
+                      display: 'flex',
+                      alignItems: 'center',
+                      backgroundColor: isDark ? 'rgb(60, 60, 60)' : 'rgb(255, 255, 255)',
+                      borderRadius: '3px',
+                      padding: '4px 8px',
                     }}
-                  />
+                  >
+                    <Search sx={{ 
+                      fontSize: '16px', 
+                      mr: 1, 
+                      color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' 
+                    }} />
+                    <InputBase
+                      placeholder="Search files..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setSearchTerm(value);
+                        const filtered = files.filter(file => 
+                          file.toLowerCase().includes(value.toLowerCase()) || 
+                          file.split('/').pop()?.toLowerCase().includes(value.toLowerCase())
+                        );
+                        setSuggestedFiles(filtered.slice(0, 5));
+                      }}
+                      sx={{
+                        flex: 1,
+                        fontSize: '13px',
+                        color: isDark ? '#e1e1e1' : '#333',
+                        '& input::placeholder': {
+                          color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+                          opacity: 1,
+                          fontSize: '13px',
+                        },
+                      }}
+                    />
+                  </Box>
                 </Box>
-              </Box>
-            </Paper>
-          )}
-        </Box>
-      </Box>
-      
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-        <Paper
-          elevation={0}
-          sx={{
-            display: 'flex',
-            backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#f0f3f4',
-            borderRadius: 5,
-            padding: '4px 8px',
-            position: 'relative',
-            minWidth: '88px',
-            height: '40px',
-            overflow: 'hidden',
-          }}
-        >
-          <input
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            ref={fileInputRef}
-            onChange={handleImageUpload}
-          />
-          {message.trim() ? (
-            <IconButton 
-              size="small" 
-              sx={{ 
-                color: isDark ? '#4ECDC4' : '#1a73e8',
-                '&:hover': {
-                  color: isDark ? '#3DBDB4' : '#1557b0'
-                }
-              }}
-              onClick={() => handleSendMessage(message)}
-              disabled={isProcessing}
-            >
-              <SendIcon />
-            </IconButton>
-          ) : (
-            <>
-              <IconButton 
-                size="small" 
-                sx={{ 
-                  color: screenshotData 
-                    ? (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(95, 99, 104, 0.3)')
-                    : (isDark ? 'rgba(255,255,255,0.7)' : '#5f6368')
-                }}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isProcessing || screenshotData !== null}
-              >
-                <ImageIcon />
-              </IconButton>
-              <IconButton 
-                size="small" 
-                sx={{ 
-                  color: screenshotData 
-                    ? (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(95, 99, 104, 0.3)')
-                    : (isDark ? 'rgba(255,255,255,0.7)' : '#5f6368'),
-                  ml: 1 
-                }} 
-                onClick={handleCaptureScreenshot}
-                disabled={isProcessing || screenshotData !== null}
-              >
-                <CameraIcon />
-              </IconButton>
-              <IconButton 
-                size="small" 
-                sx={{ 
-                  color: isDark ? 'rgba(255,255,255,0.7)' : '#5f6368',
-                  ml: 1,
-                  backgroundColor: showEditor ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)') : 'transparent'
-                }} 
-                onClick={() => {
-                  setEditorContent(message);
-                  setShowEditor(true);
-                }}
-              >
-                <EditorIcon />
-              </IconButton>
-            </>
-          )}
-        </Paper>
-      </Box>
-
-      <Dialog
-        open={showEditor}
-        onClose={handleEditorClose}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{
-          sx: {
-            height: '80vh',
-            maxHeight: '800px',
-            backgroundColor: isDark ? '#1a1a1a' : 'white',
-            color: isDark ? '#ffffff' : '#000000',
-            ...(themeStyle !== 'default' && {
-              backdropFilter: themeStyles.backdropFilter,
-              boxShadow: themeStyles.boxShadow,
-              border: themeStyles.border,
-            }),
-          }
-        }}
-      >
-
-        
-        <DialogTitle sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          borderBottom: `1px solid ${themeStyles.borderColor}`,
-          pb: 1
-        }}>
-          <span>Code Editor</span>
-          <IconButton onClick={handleEditorClose} size="small" sx={{ color: isDark ? 'rgba(255,255,255,0.7)' : '#5f6368' }}>
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent sx={{ p: 0, overflow: 'hidden' }}>
-          <Box sx={{ height: '100%' }}>
-            <Editor
-              height="100%"
-              defaultLanguage={editorLanguage}
-              value={editorContent}
-              onChange={(value) => setEditorContent(value || '')}
-              options={{
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                lineNumbers: 'on',
-                renderLineHighlight: 'all',
-                contextmenu: false,
-                folding: false,
-                fontSize: 14,
-                theme: isDark ? 'vs-dark' : 'vs-light',
-                readOnly: false,
-                bracketPairColorization: {
-                  enabled: true,
-                },
-                scrollbar: {
-                  vertical: 'visible',
-                  horizontal: 'visible',
-                  useShadows: false,
-                  verticalScrollbarSize: 8,
-                  horizontalScrollbarSize: 8,
-                },
-                padding: {
-                  top: 8,
-                  bottom: 8,
-                },
-                wordWrap: 'on',
-                wrappingIndent: 'indent',
-                lineHeight: 20,
-                cursorBlinking: 'smooth',
-                cursorSmoothCaretAnimation: 'on',
-                cursorStyle: 'line',
-                smoothScrolling: true,
-                mouseWheelZoom: true,
-                dragAndDrop: true,
-                emptySelectionClipboard: true,
-                copyWithSyntaxHighlighting: true,
-                renderWhitespace: 'selection',
-                renderControlCharacters: true,
-                renderValidationDecorations: 'on',
-                rulers: [],
-                showFoldingControls: 'always',
-                showUnused: true,
-                snippetSuggestions: 'inline',
-                suggestOnTriggerCharacters: true,
-                tabCompletion: 'off',
-                wordBasedSuggestions: 'allDocuments',
-                parameterHints: {
-                  enabled: true,
-                  cycle: true,
-                },
-                quickSuggestions: {
-                  other: true,
-                  comments: true,
-                  strings: true,
-                },
-                suggest: {
-                  preview: true,
-                  showMethods: true,
-                  showFunctions: true,
-                  showConstructors: true,
-                  showFields: true,
-                  showVariables: true,
-                  showClasses: true,
-                  showStructs: true,
-                  showInterfaces: true,
-                  showModules: true,
-                  showProperties: true,
-                  showEvents: true,
-                  showOperators: true,
-                  showUnits: true,
-                  showValues: true,
-                  showConstants: true,
-                  showEnums: true,
-                  showEnumMembers: true,
-                  showKeywords: true,
-                  showWords: true,
-                  showColors: true,
-                  showFiles: true,
-                  showReferences: true,
-                  showFolders: true,
-                  showTypeParameters: true,
-                  showSnippets: true,
-                },
-              }}
-            />
+              </Paper>
+            )}
           </Box>
-        </DialogContent>
-        <DialogActions sx={{ 
-          borderTop: `1px solid ${themeStyles.borderColor}`,
-          p: 1
-        }}>
-          <Button 
-            onClick={handleEditorClose}
-            sx={{ color: isDark ? 'rgba(255,255,255,0.7)' : '#5f6368' }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleEditorSave}
-            variant="contained"
-            sx={{ 
-              backgroundColor: isDark ? '#4ECDC4' : '#1a73e8',
-              '&:hover': {
-                backgroundColor: isDark ? '#3DBDB4' : '#1557b0'
-              }
+        </Box>
+        
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+          <Paper
+            elevation={0}
+            sx={{
+              display: 'flex',
+              backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#f0f3f4',
+              borderRadius: 5,
+              padding: '4px 8px',
+              position: 'relative',
+              minWidth: '88px',
+              height: '40px',
+              overflow: 'hidden',
             }}
           >
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              ref={fileInputRef}
+              onChange={handleImageUpload}
+            />
+            {message.trim() ? (
+              <IconButton 
+                size="small" 
+                sx={{ 
+                  color: isDark ? '#4ECDC4' : '#1a73e8',
+                  '&:hover': {
+                    color: isDark ? '#3DBDB4' : '#1557b0'
+                  }
+                }}
+                onClick={() => handleSendMessage(message)}
+                disabled={isProcessing}
+              >
+                <SendIcon />
+              </IconButton>
+            ) : (
+              <>
+                <IconButton 
+                  size="small" 
+                  sx={{ 
+                    color: screenshotData 
+                      ? (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(95, 99, 104, 0.3)')
+                      : (isDark ? 'rgba(255,255,255,0.7)' : '#5f6368')
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isProcessing || screenshotData !== null}
+                >
+                  <ImageIcon />
+                </IconButton>
+                <IconButton 
+                  size="small" 
+                  sx={{ 
+                    color: screenshotData 
+                      ? (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(95, 99, 104, 0.3)')
+                      : (isDark ? 'rgba(255,255,255,0.7)' : '#5f6368'),
+                    ml: 1 
+                  }} 
+                  onClick={handleCaptureScreenshot}
+                  disabled={isProcessing || screenshotData !== null}
+                >
+                  <CameraIcon />
+                </IconButton>
+                <IconButton 
+                  size="small" 
+                  sx={{ 
+                    color: isDark ? 'rgba(255,255,255,0.7)' : '#5f6368',
+                    ml: 1,
+                    backgroundColor: showEditor ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)') : 'transparent'
+                  }} 
+                  onClick={() => {
+                    setEditorContent(message);
+                    setShowEditor(true);
+                  }}
+                >
+                  <EditorIcon />
+                </IconButton>
+                <IconButton 
+                  size="small" 
+                  sx={{ 
+                    color: isDark ? 'rgba(255,255,255,0.7)' : '#5f6368',
+                    ml: 1,
+                    backgroundColor: showModelSelector ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)') : 'transparent'
+                  }} 
+                  onClick={() => setShowModelSelector(!showModelSelector)}
+                >
+                  <ModelIcon />
+                </IconButton>
+                <IconButton 
+                  size="small" 
+                  sx={{ 
+                    color: isDark ? 'rgba(255,255,255,0.7)' : '#5f6368',
+                    ml: 1,
+                    backgroundColor: showChatHistory ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)') : 'transparent'
+                  }} 
+                  onClick={() => {
+                    setShowChatHistory(!showChatHistory);
+                    if (!showChatHistory) {
+                      loadSavedChats();
+                    }
+                  }}
+                >
+                  <HistoryIcon />
+                </IconButton>
+              </>
+            )}
+          </Paper>
+        </Box>
+        
+        {showChatHistory && renderChatHistory()}
+      </Box>
+    );
+  };
+
+  const renderEditorDialog = () => (
+    <Dialog 
+      open={showEditor} 
+      onClose={handleEditorClose}
+      maxWidth="md"
+      fullWidth
+      PaperProps={{
+        sx: {
+          backgroundImage: 'none',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          ...(themeStyle === 'default' 
+            ? { backgroundColor: isDark ? 'rgb(30, 30, 30)' : 'rgb(255, 255, 255)' }
+            : {
+              backdropFilter: 'blur(8px)',
+              boxShadow: isDark
+                ? '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.1)'
+                : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(0, 0, 0, 0.05)',
+              border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.05)',
+              backgroundColor: isDark ? 'rgba(26, 26, 26, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+            }),
+        }
+      }}
+    >
+      <DialogTitle sx={{ 
+        borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+        padding: '16px 24px',
+        backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.04)',
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography sx={{ 
+            color: isDark ? '#e1e1e1' : '#333',
+            fontSize: '16px',
+            fontWeight: 500,
+          }}>
+            Code Editor
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={handleEditorClose}
+            sx={{
+              color: isDark ? 'rgba(255,255,255,0.7)' : '#5f6368',
+            }}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+      </DialogTitle>
+      <DialogContent sx={{ 
+        padding: 0,
+        height: '60vh',
+        backgroundColor: isDark ? 'rgb(30, 30, 30)' : 'rgb(255, 255, 255)',
+      }}>
+        <Editor
+          height="100%"
+          defaultLanguage={editorLanguage}
+          defaultValue={editorContent}
+          onChange={(value) => setEditorContent(value || '')}
+          theme={isDark ? 'vs-dark' : 'light'}
+          options={{
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            fontSize: 14,
+            lineNumbers: 'on',
+            renderLineHighlight: 'all',
+            contextmenu: true,
+            folding: true,
+            lineHeight: 1.5,
+            padding: { top: 16, bottom: 16 },
+          }}
+        />
+      </DialogContent>
+      <DialogActions sx={{ 
+        padding: '16px 24px',
+        borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+        backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.04)',
+      }}>
+        <Button 
+          onClick={handleEditorClose}
+          sx={{
+            color: isDark ? 'rgba(255,255,255,0.7)' : '#5f6368',
+            '&:hover': {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)',
+            }
+          }}
+        >
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleEditorSave}
+          variant="contained"
+          sx={{
+            backgroundColor: isDark ? '#4ECDC4' : '#1a73e8',
+            color: 'white',
+            '&:hover': {
+              backgroundColor: isDark ? '#3DBDB4' : '#1557b0',
+            }
+          }}
+        >
+          Insert Code
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 
   useEffect(() => {
@@ -1132,7 +1701,18 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
     };
   }, []);
 
-  if (!isVisible) return null;
+  // Add auto-scroll effect
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  }, [messages, isProcessing]);
+
+  if (!isVisible) return <></>;
+
+  // if (!messages || messages.length === 0) {
+  //   return <></>;
+  // }
 
   return (
     <Box
@@ -1271,18 +1851,21 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
           </Box>
 
           {/* Messages container */}
-          <Box sx={{ 
-            flex: 1,
-            overflowY: 'auto',
-            p: 2,
-            '&::-webkit-scrollbar': {
-              width: '6px',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
-              borderRadius: '3px',
-            },
-          }}>
+          <Box 
+            ref={messagesContainerRef}
+            sx={{ 
+              flex: 1,
+              overflowY: 'auto',
+              p: 2,
+              '&::-webkit-scrollbar': {
+                width: '6px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+                borderRadius: '3px',
+              },
+            }}
+          >
             {messages.map((msg, index) => (
               <Box 
                 key={index} 
@@ -1494,6 +2077,7 @@ const textareaRef = useRef<HTMLTextAreaElement>(null);
           {renderInputArea()}
         </Box>
       </Paper>
+      {renderEditorDialog()}
     </Box>
   );
 };

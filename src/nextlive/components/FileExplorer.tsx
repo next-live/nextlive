@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, IconButton, Collapse } from '@mui/material';
+import { Box, Typography,Collapse } from '@mui/material';
 import { Folder, FolderOpen, InsertDriveFile } from '@mui/icons-material';
-import { codeEditService } from '../services/codeEdit/codeEditService';
 
 interface FileNode {
   name: string;

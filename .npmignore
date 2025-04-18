@@ -1,0 +1,50 @@
+# Development
+.git
+.github
+.vscode
+.idea
+*.log
+.DS_Store
+
+# Source
+src
+!src/index.ts
+
+# Config files
+.eslintrc
+.eslintignore
+.prettierrc
+.prettierignore
+tsconfig.json
+rollup.config.js
+postcss.config.mjs
+eslint.config.mjs
+next.config.ts
+nextlive.config.json
+
+# Dependencies
+node_modules
+
+# Build
+.next
+dist/types
+
+# Tests
+__tests__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Documentation
+docs
+CONTRIBUTING.md
+SECURITY.md
+
+# Misc
+.env*
+.editorconfig
+.gitignore
+.npmignore
+README.md
+LICENSE 

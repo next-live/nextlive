@@ -50,8 +50,8 @@ function buildFileTree(dir: string, basePath: string = ''): FileNode[] {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    let { filepath, operation, lineNumbers, code, path: listPath } = body;
-    filepath = filepath.replace('@','')
+    const { filepath, operation, lineNumbers, code, path: listPath } = body;
+    const filepaths = filepath.replace('@','')
 
     if (operation === 'list') {
       const basePath = path.join(process.cwd(), listPath || 'src');
@@ -59,14 +59,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ tree });
     }
 
-    if (!filepath) {
+    if (!filepaths) {
       return NextResponse.json(
         { error: 'File path is required' },
         { status: 400 }
       );
     }
 
-    let absolutePath = path.join(process.cwd(), "src/", filepath);
+    let absolutePath = path.join(process.cwd(), "src/", filepaths);
 
     // Security check: ensure the path is within the project directory
     if (!absolutePath.startsWith(process.cwd())) {
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 
     switch (operation) {
       case 'read':
-        absolutePath = path.join(process.cwd(), "src/", filepath);
+        absolutePath = path.join(process.cwd(), "src/", filepaths);
         if (!fs.existsSync(absolutePath)) {
           return NextResponse.json(
             { error: 'File not found' },
@@ -90,6 +90,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ content });
 
       case 'write':
+        try {
+          console.log(absolutePath);
+          if(!code) return NextResponse.json({ error: 'No code provided' }, { status: 400 });
+          if(!path) return NextResponse.json({ error: 'No path provided' }, { status: 400 });
+          if(!fs.existsSync(path.dirname(absolutePath))) {
+            fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+          }
+          fs.writeFileSync(absolutePath, code)
+          return NextResponse.json({ success: true });
+        } catch {
+          console.error('Error writing file');
+          return NextResponse.json({ error: 'Failed to write file' }, { status: 500 });
+        }
       case 'edit':
         // Create directory if it doesn't exist
         fs.mkdirSync(path.dirname(absolutePath), { recursive: true });

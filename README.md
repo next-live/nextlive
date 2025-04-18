@@ -1,94 +1,157 @@
-<div align="center">
-<img src="public/readme-logo.png">
-<img src="public/readme-banner.png">
-</div>
+# NextLive React Component
 
-# NextLive
-NextLive is a Next.js application that provides live collaboration and real-time features. The project is built using modern web technologies and follows best practices for React and Next.js development.
+A powerful React component for live code editing and AI assistance.
 
-## Tech Stack
-
-- **Framework**: Next.js 15.2.4
-- **Language**: TypeScript
-- **UI Libraries**: 
-  - Material-UI (@mui/material)
-  - Emotion (@emotion/react, @emotion/styled)
-- **Markdown Processing**: react-markdown with remark-gfm
-- **Image Processing**: html2canvas
-- **AI Integration**: @google/generative-ai
-- **Styling**: TailwindCSS
-- **Development Tools**:
-  - ESLint
-  - TypeScript
-  - Turbopack (for development)
-
-## Project Structure
-
-```
-src/
-├── app/                 # Next.js app router pages and layouts
-├── nextlive/           # Custom NextLive feature implementation
-│   ├── components/     # Reusable UI components
-│   ├── services/       # Business logic and services
-│   └── NextLive.tsx    # Main NextLive component
-└── utils/              # Utility functions and helpers
-```
-
-## Key Features
-
-1. **Live Collaboration**: Real-time collaboration features through the NextLive component
-2. **Modern UI**: Built with Material-UI and Emotion for a polished user experience
-3. **Type Safety**: Full TypeScript support for better development experience
-4. **Markdown Support**: Rich text editing with Markdown support
-5. **AI Integration**: Integration with Google's Generative AI
-
-## Development
-
-### Prerequisites
-
-- Node.js (version compatible with Next.js 15)
-- npm or yarn
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-### Running the Development Server
+## Installation
 
 ```bash
-npm run dev
+npm install @nextlive/react
+# or
+yarn add @nextlive/react
 ```
 
-The application will be available at `http://localhost:3000`
+## Usage
 
-### Building for Production
+```jsx
+import { NextLive } from '@nextlive/react';
 
-```bash
-npm run build
-npm start
+function App() {
+  return (
+    <NextLive>
+      {/* Your app content */}
+      <div>Your app content goes here</div>
+    </NextLive>
+  );
+}
+
+export default App;
 ```
 
-## Environment Variables
+## Features
 
-The project uses `.env.local` for environment-specific configuration. Make sure to set up the required environment variables before running the application.
+- Live code editing with AI assistance
+- Voice chat integration with Gemini AI
+- Code block rendering with syntax highlighting
+- File explorer for navigating your codebase
+- Mobile-friendly UI with glassmorphism design
 
-## Contributing
+## Components
 
-1. Create a feature branch
-2. Make your changes
-3. Submit a pull request
+### NextLive
+
+The main component that provides the live editing experience.
+
+```jsx
+<NextLive skipDevelopmentCheck={false} skipPaths={[]}>
+  {children}
+</NextLive>
+```
+
+### GeminiMobileThemeChat
+
+A chat component with a mobile-friendly UI and glassmorphism design.
+
+```jsx
+import { GeminiMobileThemeChat } from '@nextlive/react';
+
+<GeminiMobileThemeChat
+  onClose={() => {}}
+  onSendMessage={(message) => {}}
+  messages={[]}
+  isVisible={true}
+  setIsVisible={() => {}}
+  isTakingScreenshot={false}
+  setIsTakingScreenshot={() => {}}
+  isSidePanel={false}
+  width={350}
+  theme="dark"
+  themeStyle="glassmorphism"
+  onWidthChange={() => {}}
+  initialPosition={{ x: 0, y: 0 }}
+/>
+```
+
+### GeminiVoiceChat
+
+A voice chat component that integrates with Gemini AI.
+
+```jsx
+import { GeminiVoiceChat } from '@nextlive/react';
+
+<GeminiVoiceChat apiKey="your-api-key" />
+```
+
+### CodeBlock
+
+A component for rendering code blocks with syntax highlighting.
+
+```jsx
+import { CodeBlock } from '@nextlive/react';
+
+<CodeBlock
+  data={{
+    filepath: 'example.ts',
+    lineNumbers: '1-10',
+    code: 'console.log("Hello, world!");',
+    language: 'typescript'
+  }}
+  onCopy={() => {}}
+  onPlay={() => {}}
+/>
+```
+
+### FileExplorer
+
+A component for navigating your codebase.
+
+```jsx
+import { FileExplorer } from '@nextlive/react';
+
+<FileExplorer onFileSelect={(filePath) => {}} />
+```
+
+## Services
+
+### codeEditService
+
+A service for editing code files.
+
+```jsx
+import { codeEditService } from '@nextlive/react';
+
+// Apply a code edit
+await codeEditService.applyEdit({
+  filepath: 'example.ts',
+  lineNumbers: '1-10',
+  code: 'console.log("Hello, world!");'
+});
+
+// Read a file
+const code = await codeEditService.readFile('example.ts');
+```
+
+### geminiChatService
+
+A service for interacting with Gemini AI chat.
+
+```jsx
+import { geminiChatService } from '@nextlive/react';
+
+// Send a message to Gemini AI
+const response = await geminiChatService.sendMessage('Hello, Gemini!');
+```
+
+### geminiLiveService
+
+A service for live interactions with Gemini AI.
+
+```jsx
+import { geminiLiveService } from '@nextlive/react';
+
+// Start a live session with Gemini AI
+const session = await geminiLiveService.startSession();
+```
 
 ## License
 
-See [LISCENSE](LICENSE) for license
-
-## Additional Notes
-
-- The application uses Turbopack for faster development builds
-- TailwindCSS is configured for styling
-- ESLint is set up for code quality
-- TypeScript is configured for type safety
+MIT

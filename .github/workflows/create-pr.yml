@@ -1,0 +1,45 @@
+name: Create Pull Request
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: 'release/v${{ steps.get_version.outputs.VERSION }}'
+          base: 'main'
+          title: 'Release v${{ steps.get_version.outputs.VERSION }}'
+          body: |
+            ## Release v${{ steps.get_version.outputs.VERSION }}
+            
+            This PR contains the changes for the v${{ steps.get_version.outputs.VERSION }} release.
+            
+            ### Changes
+            
+            See the [changelog](https://github.com/next-live/nextlive/blob/main/CHANGELOG.md) for details.
+            
+            ### Installation
+            
+            ```bash
+            npm install @next-live/nextlive@${{ steps.get_version.outputs.VERSION }}
+            # or
+            yarn add @next-live/nextlive@${{ steps.get_version.outputs.VERSION }}
+            ```
+          labels: 'release'
+          delete-branch: false 

@@ -17,14 +17,7 @@ export default function Home() {
             <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
               src/app/page.tsx
             </code>
-<Image
-  src="/favicon.ico"
-  alt="Next.js Logo"
-  className="dark:invert"
-  width={32}
-  height={32}
-            />
-            Deploy now
+            <strong>Deploy now</strong>
           </li>
         </ol>
       </main>

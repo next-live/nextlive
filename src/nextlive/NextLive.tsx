@@ -178,7 +178,6 @@ const CodeBlock: React.FC<{
 const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = false, skipPaths = [] }) => {
   // Return children directly if in development and not in development mode or if the path is in the skipPaths array
   const pathname = usePathname();
-  const shouldSkip = skipPaths.some(skipPath => isPathMatching(pathname, skipPath));
   
   // if (process.env.NODE_ENV === 'development' && !skipDevelopmentCheck && !shouldSkip) {
   //   return <>{children}</>;
@@ -451,7 +450,7 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
     // Enable mouse wheel zoom
     mouseWheelZoom: true,
     // Enable multi cursor
-    multiCursorModifier: 'alt',
+    multiCursorModifier: 'alt' as const,
     // Enable accessibility support
     accessibilitySupport: 'auto',
     // Enable cursor blinking
@@ -485,9 +484,9 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
         if (response.ok) {
           const data = await response.json();
           const latestVersion = data.tag_name.replace('v', '');
-          const needsUpdate = latestVersion !== config.version;
+          const needsUpdate = latestVersion !== "1.0-alpha-release-re3sadv";
           setVersionInfo({
-            currentVersion: config.version,
+            currentVersion: "1.0-alpha-release-re3sadv",
             latestVersion,
             needsUpdate
           });
@@ -586,7 +585,6 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
               defaultLanguage={editorLanguage}
               value={editorContent}
               options={{
-                ...editorOptions,
                 scrollbar: {
                   ...editorOptions.scrollbar,
                   vertical: 'visible' as const,

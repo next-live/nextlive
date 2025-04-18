@@ -41,9 +41,66 @@ const functionDeclarations = [getFileDeclaration, editFileDeclaration];
 type GetFileParams = { fileName: string; lineStart?: number; lineEnd?: number };
 type EditFileParams = { fileName: string; lineStart?: number; lineEnd?: number; code?: string };
 
+// Define interfaces for chat messages
+interface ChatMessagePart {
+  text?: string;
+  functionCall?: FunctionCall;
+}
+
+interface FunctionCall {
+  name: string;
+  args: GetFileParams | EditFileParams;
+}
+
+interface ChatMessage {
+  role: 'user' | 'model';
+  name?: string;
+  parts: ChatMessagePart[];
+}
+
 export class GeminiService extends EventEmitter {
-  private chatHistory: any[] = [];
+  private chatHistory: ChatMessage[] = [];
   private model = 'gemini-2.0-flash';
+  private chatId: string;
+
+  constructor() {
+    super();
+    this.chatId = this.generateChatId();
+  }
+
+  private generateChatId(): string {
+    return `chat_${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  }
+
+  private async saveChatHistory() {
+    try {
+      const chatData = {
+        id: this.chatId,
+        model: this.model,
+        messages: this.chatHistory
+      };
+
+      const response = await fetch('/api/chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(chatData)
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to save chat');
+      }
+
+      this.emit('status', 'Chat history saved');
+    } catch (error) {
+      console.error('Error saving chat history:', error);
+      this.emit('status', 'Error saving chat history');
+    }
+  }
+
+  async setModel(model: string) {
+    this.model = model;
+  }
 
   async sendMessage(message: string) {
     this.chatHistory.push({ role: 'user', parts: [{ text: message }] });
@@ -64,16 +121,22 @@ export class GeminiService extends EventEmitter {
     });
 
     let fullReply = '';
-    let funcCall: any = null;
+    let funcCall: FunctionCall | null = null;
 
     this.emit('status', 'Generating response...');
     for await (const chunk of responseStream) {
       if (chunk.functionCalls && chunk.functionCalls.length) {
-        funcCall = chunk.functionCalls[0];
-        if (funcCall.name === 'editFile') {
-          this.emit('status', `Preparing to edit file: ${funcCall.args?.fileName || 'unknown'}`);
-        } else {
-          this.emit('status', `Preparing to read file: ${funcCall.args?.fileName || 'unknown'}`);
+        const call = chunk.functionCalls[0];
+        if (call.name) {
+          funcCall = {
+            name: call.name,
+            args: call.args as GetFileParams | EditFileParams
+          };
+          if (funcCall.name === 'editFile') {
+            this.emit('status', `Preparing to edit file: ${funcCall.args?.fileName || 'unknown'}`);
+          } else {
+            this.emit('status', `Preparing to read file: ${funcCall.args?.fileName || 'unknown'}`);
+          }
         }
       }
       if (chunk.text) {
@@ -87,7 +150,7 @@ export class GeminiService extends EventEmitter {
 
       if (funcCall.name === 'editFile') {
         this.emit('status', `Editing file: ${funcCall.args?.fileName || 'unknown'}`);
-        const args: EditFileParams = funcCall.args;
+        const args: EditFileParams = funcCall.args as EditFileParams;
         
         try {
           const res = await fetch('/api/code-edit', {
@@ -97,7 +160,7 @@ export class GeminiService extends EventEmitter {
               filepath: args.fileName,
               lineNumbers: args.lineStart && args.lineEnd ? `${args.lineStart}-${args.lineEnd}` : undefined,
               operation: 'write',
-              content: args.code
+              code: args.code
             }),
           });
 
@@ -106,7 +169,7 @@ export class GeminiService extends EventEmitter {
             throw new Error(data.error || 'Failed to edit file');
           }
 
-          this.chatHistory.push({ role: 'model', parts: [{ functionCall: funcCall }] });
+          this.chatHistory.push({ role: 'model', parts: [{ text: '', functionCall: funcCall }] });
           this.chatHistory.push({ 
             role: 'user', 
             name: funcCall.name, 
@@ -121,9 +184,8 @@ export class GeminiService extends EventEmitter {
           return `Error editing file: ${errorMessage}`;
         }
       } else {
-        // Existing read file logic
         this.emit('status', `Reading file: ${funcCall.args?.fileName || 'unknown'}`);
-        const args: GetFileParams = funcCall.args || funcCall;
+        const args: GetFileParams = funcCall.args as GetFileParams;
         const fileName = args.fileName;
         console.log('File name:', fileName);
         
@@ -145,7 +207,7 @@ export class GeminiService extends EventEmitter {
         const content = data.content || data.error || '';
         console.log('File content:', content);
 
-        this.chatHistory.push({ role: 'model', parts: [{ functionCall: funcCall }] });
+        this.chatHistory.push({ role: 'model', parts: [{ text: '', functionCall: funcCall }] });
         this.chatHistory.push({ role: 'user', name: funcCall.name, parts: [{ text: content }] });
       }
 
@@ -162,34 +224,124 @@ export class GeminiService extends EventEmitter {
       this.chatHistory.push({ role: 'model', parts: [{ text: fullReply }] });
     }
 
+    // Save chat history after each message
+    await this.saveChatHistory();
+
     this.emit('status', 'Done');
     return fullReply;
   }
 
   reset() {
+    // Save the current chat before resetting
+    if (this.chatHistory.length > 0) {
+      this.saveChatHistory();
+    }
+    
     this.chatHistory = [];
+    this.chatId = this.generateChatId();
     this.emit('status', 'Chat history cleared');
   }
 
-  private async findFilePath(fileName: string): Promise<string> {
-    this.emit('status', `Searching for file: ${fileName}`);
-    const res = await fetch('/api/project-structure?baseDir=src&depth=10');
-    const { structure } = await res.json();
-    function recurse(node: Record<string, any>, current: string): string | null {
-      for (const [name, info] of Object.entries(node)) {
-        const nextPath = `${current}/${name}`;
-        if (info.type === 'file' && name === fileName) return nextPath;
-        if (info.type === 'directory' && info.children) {
-          const found = recurse(info.children, nextPath);
-          if (found) return found;
-        }
-      }
-      return null;
-    }
-    const result = recurse(structure, 'src') || '';
-    this.emit('status', result ? `File found: ${result}` : `File not found: ${fileName}`);
-    return result;
+  getChatHistory() {
+    return this.chatHistory;
   }
+
+  async loadChatHistory(chatId: string) {
+    try {
+      const response = await fetch(`/api/chats/${chatId}`);
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to load chat');
+      }
+
+      this.chatHistory = data.chat.messages;
+      this.model = data.chat.model;
+      this.chatId = data.chat.id;
+      this.emit('status', 'Chat history loaded');
+      return true;
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+      this.emit('status', 'Error loading chat history');
+      return false;
+    }
+  }
+
+  async listSavedChats() {
+    try {
+      const response = await fetch('/api/chats');
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to list chats');
+      }
+
+      return data.chats;
+    } catch (error) {
+      console.error('Error listing saved chats:', error);
+      this.emit('status', 'Error listing saved chats');
+      return [];
+    }
+  }
+
+  async deleteChat(chatId: string) {
+    try {
+      const response = await fetch(`/api/chats/${chatId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to delete chat');
+      }
+
+      this.emit('status', 'Chat deleted');
+      return true;
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      this.emit('status', 'Error deleting chat');
+      return false;
+    }
+  }
+
+  private async findFilePath(fileName: string): Promise<string> {
+    try {
+      const response = await fetch('/api/project-structure');
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to get project structure');
+      }
+
+      function recurse(node: Record<string, FileStructure>, current: string): string | null {
+        for (const [key, value] of Object.entries(node)) {
+          const path = current ? `${current}/${key}` : key;
+          
+          if (value.type === 'file' && key === fileName) {
+            return path;
+          }
+          
+          if (value.type === 'directory' && value.children) {
+            const result = recurse(value.children, path);
+            if (result) return result;
+          }
+        }
+        
+        return null;
+      }
+
+      const filePath = recurse(data.structure, '');
+      return filePath || fileName;
+    } catch (error) {
+      console.error('Error finding file path:', error);
+      return fileName;
+    }
+  }
+}
+
+interface FileStructure {
+  type: 'file' | 'directory';
+  children?: Record<string, FileStructure>;
 }
 
 export const geminiService = new GeminiService();

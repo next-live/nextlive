@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Form (Glassmorphism)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Use 100vh for full viewport height */
+            background: linear-gradient(to right bottom, #4a00e0, #8e2de2); /* Example gradient background */
+            color: #333; /* Adjust text color for better contrast */
+            margin: 0;
+        }
+
+        .login-container {
+            background-color: rgba(255, 255, 255, 0.15); /* Semi-transparent white */
+            backdrop-filter: blur(10px); /* Apply blur effect */
+            border: 1px solid rgba(255, 255, 255, 0.2); /* Light border */
+            border-radius: 8px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1); /* Softer, slightly larger shadow */
+            padding: 30px;
+            width: 300px; /* Set a width for better layout */
+            box-sizing: border-box;
+        }
+
+        .login-container h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #fff; /* White color for heading */
+            text-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #eee; /* Light color for labels */
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.3); /* Semi-transparent border */
+            background-color: rgba(255, 255, 255, 0.1); /* Semi-transparent background */
+            border-radius: 4px;
+            box-sizing: border-box;
+            color: #fff; /* White text color for input */
+        }
+
+         .form-group input[type="text"]::placeholder,
+         .form-group input[type="password"]::placeholder {
+            color: #ccc; /* Light placeholder color */
+         }
+
+        .form-group button {
+            width: 100%;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.2); /* Semi-transparent button background */
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            backdrop-filter: blur(5px); /* Subtle blur on button */
+            transition: background-color 0.3s ease;
+        }
+
+        .form-group button:hover {
+            background-color: rgba(255, 255, 255, 0.3); /* Slightly less transparent on hover */
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h2>Login</h2>
+        <form action="/login" method="post">
+            <div class="form-group">
+                <label for="username">Username or Email:</label>
+                <input type="text" id="username" name="username" required placeholder="Enter username or email">
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required placeholder="Enter password">
+            </div>
+            <div class="form-group">
+                <button type="submit">Login</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

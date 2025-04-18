@@ -1,0 +1,49 @@
+name: npm Check Updates
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sundays
+  workflow_dispatch:
+
+jobs:
+  npm-check-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm-check-updates
+        run: npm install -g npm-check-updates
+
+      - name: Check for outdated packages
+        run: ncu
+
+      - name: Create issue if outdated packages found
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['npm-check-updates']
+            });
+            
+            const existingIssue = issues.find(issue => issue.title === 'npm-check-updates found outdated packages');
+            
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'npm-check-updates found outdated packages',
+                body: 'npm-check-updates found outdated packages. Please run `ncu` locally and update the packages.',
+                labels: ['npm-check-updates', 'dependencies']
+              });
+            } 

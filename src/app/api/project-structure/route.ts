@@ -2,6 +2,20 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
+// Define interfaces for the directory structure
+interface FileInfo {
+  type: 'file';
+  size: number;
+  modified: Date;
+}
+
+interface DirectoryInfo {
+  type: 'directory';
+  children: Record<string, FileInfo | DirectoryInfo>;
+}
+
+type FileSystemNode = FileInfo | DirectoryInfo;
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -23,12 +37,12 @@ export async function GET(request: Request) {
   }
 }
 
-async function getDirectoryStructure(dir: string, maxDepth: number, currentDepth: number = 0): Promise<Record<string, any>> {
+async function getDirectoryStructure(dir: string, maxDepth: number, currentDepth: number = 0): Promise<Record<string, FileSystemNode>> {
   if (currentDepth > maxDepth) {
     return {};
   }
 
-  const structure: Record<string, any> = {};
+  const structure: Record<string, FileSystemNode> = {};
   const items = await fs.promises.readdir(dir, { withFileTypes: true });
 
   for (const item of items) {

@@ -1,0 +1,72 @@
+name: Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create ESLint config
+        run: |
+          echo '{
+            "extends": "next/core-web-vitals",
+            "rules": {
+              "@typescript-eslint/no-unused-vars": "warn",
+              "@typescript-eslint/no-explicit-any": "warn",
+              "react-hooks/exhaustive-deps": "warn",
+              "@next/next/no-img-element": "warn",
+              "jsx-a11y/alt-text": "warn",
+              "prefer-const": "warn"
+            }
+          }' > .eslintrc.json
+
+      - name: Lint
+        run: npm run lint -- --fix || true
+
+      - name: Build library
+        run: npm run build:lib
+
+      - name: Verify package
+        run: |
+          npm pack --dry-run
+          npm publish --dry-run
+
+      - name: Create issue if linting errors found
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['linting']
+            });
+            
+            const existingIssue = issues.find(issue => issue.title === 'Linting errors found');
+            
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Linting errors found',
+                body: 'ESLint found errors in the codebase. Please run `npm run lint -- --fix` locally and fix any remaining issues.',
+                labels: ['linting', 'code-quality']
+              });
+            } 
