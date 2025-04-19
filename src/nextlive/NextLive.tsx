@@ -14,6 +14,8 @@ import FileExplorer from './components/FileExplorer';
 import EditorOptions from '@monaco-editor/react';
 import config from '../../nextlive.config.json'
 
+const CURRENT_VERSION = "1.1-alpha-release-re3sadw";
+
 interface NextLiveProps {
   children?: React.ReactNode;
   skipDevelopmentCheck?: boolean;
@@ -193,7 +195,7 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
   const [editorLanguage, setEditorLanguage] = useState('typescript');
   const [currentFilePath, setCurrentFilePath] = useState('');
   const [versionInfo, setVersionInfo] = useState<VersionInfo>({
-    currentVersion: "1.0-alpha-release-re3sadv",
+    currentVersion: CURRENT_VERSION,
     latestVersion: null,
     needsUpdate: false
   });
@@ -484,9 +486,9 @@ const NextLive: React.FC<NextLiveProps> = ({ children, skipDevelopmentCheck = fa
         if (response.ok) {
           const data = await response.json();
           const latestVersion = data.tag_name.replace('v', '');
-          const needsUpdate = latestVersion !== "1.0-alpha-release-re3sadv";
+          const needsUpdate = latestVersion !== CURRENT_VERSION;
           setVersionInfo({
-            currentVersion: "1.0-alpha-release-re3sadv",
+            currentVersion: CURRENT_VERSION,
             latestVersion,
             needsUpdate
           });

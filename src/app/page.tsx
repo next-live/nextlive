@@ -20,6 +20,13 @@ export default function Home() {
             <strong>Deploy now</strong>
           </li>
         </ol>
+        {/* Added Button Below */}
+        <button 
+          className="px-4 py-2 font-semibold text-sm bg-white text-black rounded-full shadow-sm"
+        >
+          Deploy now
+        </button>
+        {/* End Button */}
       </main>
       <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
         <a

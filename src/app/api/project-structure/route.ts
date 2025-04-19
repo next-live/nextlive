@@ -16,17 +16,40 @@ interface DirectoryInfo {
 
 type FileSystemNode = FileInfo | DirectoryInfo;
 
+function formatTreeStructure(structure: Record<string, FileSystemNode>, prefix = '', isLast = true): string {
+  let output = '';
+  const entries = Object.entries(structure);
+  
+  entries.forEach(([name, info], index) => {
+    const isLastEntry = index === entries.length - 1;
+    const currentPrefix = prefix + (isLast ? '└── ' : '├── ');
+    const childPrefix = prefix + (isLast ? '    ' : '│   ');
+    
+    if (info.type === 'directory') {
+      output += currentPrefix + name + '/\n';
+      if (info.children) {
+        output += formatTreeStructure(info.children, childPrefix, isLastEntry);
+      }
+    } else {
+      output += currentPrefix + name + '\n';
+    }
+  });
+  
+  return output;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const baseDir = searchParams.get('baseDir') || 'src/nextlive';
+    const baseDir = searchParams.get('baseDir') || './src';
     const depth = parseInt(searchParams.get('depth') || '2');
 
     const structure = await getDirectoryStructure(baseDir, depth);
+    const formattedStructure = formatTreeStructure(structure);
     
     return NextResponse.json({ 
       success: true, 
-      structure 
+      structure: `${formattedStructure}`
     });
   } catch (error) {
     console.error('Error getting project structure:', error);

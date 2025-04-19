@@ -327,23 +327,31 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
         
         const fileList = flattenStructure(data.structure);
         setFiles(fileList);
+        // Initialize suggested files with all files
+        setSuggestedFiles(fileList.slice(0, 5));
+        setShowFileSuggestions(true);
       } else {
         throw new Error('Invalid response format');
       }
     } catch (error) {
       console.error('Error fetching files:', error);
       // Fallback to some dummy files for demo
-      setFiles([
+      const fallbackFiles = [
         'src/pages/index.tsx',
         'src/components/Header.tsx',
         'src/styles/globals.css',
         'package.json',
         'next.config.js'
-      ]);
+      ];
+      setFiles(fallbackFiles);
+      setSuggestedFiles(fallbackFiles);
+      setShowFileSuggestions(true);
     } finally {
       setIsLoadingFiles(false);
     }
   };
+
+  // Update useEffect to fetch files immediately
   useEffect(() => {
     fetchFiles();
   }, []);
@@ -1333,9 +1341,7 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
                       '&:hover': {
                         background: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'
                       }
-                    },
-                    scrollbarWidth: 'thin',
-                    scrollbarColor: `${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'} transparent`,
+                    }
                   }}
                 >
                   {suggestedFiles.map((file, index) => {
@@ -1380,7 +1386,7 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
                             <Typography
                               sx={{
                                 fontSize: '13px',
-                                fontWeight: 400,
+                                fontWeight: 500,
                                 color: isDark ? '#e1e1e1' : '#333',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
@@ -1396,7 +1402,8 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
                                   color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
-                                  textOverflow: 'ellipsis'
+                                  textOverflow: 'ellipsis',
+                                  fontFamily: 'monospace'
                                 }}
                               >
                                 {filePath}
@@ -1407,52 +1414,6 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
                       </MenuItem>
                     );
                   })}
-                </Box>
-                <Box
-                  sx={{
-                    p: 1,
-                    borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-                    backgroundColor: isDark ? 'rgb(37, 37, 38)' : 'rgb(243, 243, 243)',
-                  }}
-                >
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      backgroundColor: isDark ? 'rgb(60, 60, 60)' : 'rgb(255, 255, 255)',
-                      borderRadius: '3px',
-                      padding: '4px 8px',
-                    }}
-                  >
-                    <Search sx={{ 
-                      fontSize: '16px', 
-                      mr: 1, 
-                      color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' 
-                    }} />
-                    <InputBase
-                      placeholder="Search files..."
-                      value={searchTerm}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setSearchTerm(value);
-                        const filtered = files.filter(file => 
-                          file.toLowerCase().includes(value.toLowerCase()) || 
-                          file.split('/').pop()?.toLowerCase().includes(value.toLowerCase())
-                        );
-                        setSuggestedFiles(filtered.slice(0, 5));
-                      }}
-                      sx={{
-                        flex: 1,
-                        fontSize: '13px',
-                        color: isDark ? '#e1e1e1' : '#333',
-                        '& input::placeholder': {
-                          color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
-                          opacity: 1,
-                          fontSize: '13px',
-                        },
-                      }}
-                    />
-                  </Box>
                 </Box>
               </Paper>
             )}
