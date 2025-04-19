@@ -12,9 +12,7 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "build:lib": "rollup -c",
-    "prepare": "npm run build:lib"
+    "lint": "next lint"
   },
   "repository": {
     "type": "git",
@@ -57,9 +55,6 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
-    "@rollup/plugin-commonjs": "^25.0.0",
-    "@rollup/plugin-node-resolve": "^15.0.0",
-    "@rollup/plugin-typescript": "^11.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -67,10 +62,6 @@
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
     "next": "15.2.4",
-    "rollup": "^3.0.0",
-    "rollup-plugin-dts": "^6.0.0",
-    "rollup-plugin-peer-deps-external": "^2.2.4",
-    "rollup-plugin-terser": "^7.0.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
