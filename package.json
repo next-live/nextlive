@@ -1,6 +1,6 @@
 {
-  "name": "@next-live/nextlive",
-  "version": "0.1.0",
+  "name": "@nextlive/nextlive",
+  "version": "1.0.0",
   "description": "NextLive - A React component for live code editing and AI assistance",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
@@ -46,9 +46,11 @@
     "@mui/material": "^7.0.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "antd": "^5.24.7",
+    "dotenv": "^16.5.0",
     "html2canvas": "^1.4.1",
     "html2canvas-pro": "^1.5.8",
     "js-base64": "^3.7.7",
+    "mime": "^4.0.7",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^15.6.1",
     "remark-gfm": "^4.0.1"

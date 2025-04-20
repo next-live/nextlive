@@ -2005,29 +2005,48 @@ const GeminiMobileThemeChat: FC<GeminiMobileThemeChatProps> = ({
                         }
                       })
                     }}>
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          code: ({ node, className, children, ...props }) => {
-                            const match = /language-(\w+)/.exec(className || '');
-                            return match ? (
-                              <CodeBlock language={match[1]} value={String(children).replace(/\n$/, '')} />
-                            ) : (
-                              <code className={className} {...props}
-                                style={{
-                                  backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)',
-                                  padding: '2px 4px',
-                                  borderRadius: '4px',
-                                }}
-                              >
-                                {children}
-                              </code>
-                            );
-                          }
-                        }}
-                      >
-                        {typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}
-                      </ReactMarkdown>
+                      {typeof msg.content === 'string' && msg.content.startsWith('data:image') ? (
+                        <Box sx={{ 
+                          position: 'relative',
+                          maxWidth: '100%',
+                          borderRadius: '8px',
+                          overflow: 'hidden'
+                        }}>
+                          <img 
+                            src={msg.content}
+                            alt="Generated image"
+                            style={{ 
+                              maxWidth: '100%',
+                              height: 'auto',
+                              borderRadius: '8px'
+                            }}
+                          />
+                        </Box>
+                      ) : (
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            code: ({ node, className, children, ...props }) => {
+                              const match = /language-(\w+)/.exec(className || '');
+                              return match ? (
+                                <CodeBlock language={match[1]} value={String(children).replace(/\n$/, '')} />
+                              ) : (
+                                <code className={className} {...props}
+                                  style={{
+                                    backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)',
+                                    padding: '2px 4px',
+                                    borderRadius: '4px',
+                                  }}
+                                >
+                                  {children}
+                                </code>
+                              );
+                            }
+                          }}
+                        >
+                          {typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}
+                        </ReactMarkdown>
+                      )}
                     </Box>
                   )}
                 </Box>

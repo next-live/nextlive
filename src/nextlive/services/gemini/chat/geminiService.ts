@@ -1,10 +1,11 @@
 import { GoogleGenAI, Type, FunctionCallingConfigMode } from '@google/genai';
 import { EventEmitter } from 'events';
-
+import {GeminiImageGenerator} from './imageGen'
 // Initialize Gemini AI client
 const ai = new GoogleGenAI({
   apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || '',
 });
+
 
 let instructions = `
 # NextLive Gemini AI System Instructions
@@ -46,7 +47,7 @@ The NextLive project has the following structure:
 You have access to the following functions:
 - 'getFile': Read file content from the project
 - 'editFile': Edit files in the project
-- 'getSystemInfo': Retrieve system information (if needed)
+- 'imageGen': Generate images using AI
 
 ## Limitations
 1. You cannot access external resources or APIs without explicit permission
@@ -171,10 +172,24 @@ const editFileDeclaration = {
   },
 };
 
-const functionDeclarations = [getFileDeclaration, editFileDeclaration];
+
+const imageGenDeclaration = {
+  name: 'imageGen',
+  description: 'Generates an image using AI',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      prompt: { type: Type.STRING, description: 'Prompt for image generation' },
+    },
+    required: ['prompt'],
+  },
+};
+
+const functionDeclarations = [getFileDeclaration, editFileDeclaration, imageGenDeclaration];
 
 type GetFileParams = { fileName: string; lineStart?: number; lineEnd?: number };
 type EditFileParams = { fileName: string; lineStart?: number; lineEnd?: number; code?: string };
+type ImageGenParams = { prompt: string };
 
 // Define interfaces for chat messages
 interface ChatMessagePart {
@@ -184,7 +199,7 @@ interface ChatMessagePart {
 
 interface FunctionCall {
   name: string;
-  args: GetFileParams | EditFileParams;
+  args: GetFileParams | EditFileParams | ImageGenParams;
 }
 
 interface ChatMessage {
@@ -197,10 +212,12 @@ export class GeminiService extends EventEmitter {
   private chatHistory: ChatMessage[] = [];
   private model = 'gemini-2.0-flash';
   private chatId: string;
+  private imageGenerator: GeminiImageGenerator;
 
   constructor() {
     super();
     this.chatId = this.generateChatId();
+    this.imageGenerator = new GeminiImageGenerator(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
   }
 
   private generateChatId(): string {
@@ -263,7 +280,8 @@ export class GeminiService extends EventEmitter {
     });
 
     let fullReply = '';
-    let funcCall: FunctionCall | null = null;
+    let funcCall: FunctionCall | undefined;
+    let imageUri = ''
 
     this.emit('status', 'Generating response...');
     for await (const chunk of responseStream) {
@@ -272,12 +290,59 @@ export class GeminiService extends EventEmitter {
         if (call.name) {
           funcCall = {
             name: call.name,
-            args: call.args as GetFileParams | EditFileParams
+            args: call.args as GetFileParams | EditFileParams | ImageGenParams
           };
-          if (funcCall.name === 'editFile') {
-            this.emit('status', `Preparing to edit file: ${funcCall.args?.fileName || 'unknown'}`);
-          } else {
-            this.emit('status', `Preparing to read file: ${funcCall.args?.fileName || 'unknown'}`);
+
+          if (isFunctionName(funcCall.name, 'editFile') && isFileParams(funcCall.args)) {
+            this.emit('status', `Editing file: ${funcCall.args.fileName || 'unknown'}`);
+            const args = funcCall.args as EditFileParams;
+            
+            try {
+              const res = await fetch('/api/code-edit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  filepath: args.fileName,
+                  lineNumbers: args.lineStart && args.lineEnd ? `${args.lineStart}-${args.lineEnd}` : undefined,
+                  operation: 'write',
+                  code: args.code
+                }),
+              });
+
+              const data = await res.json();
+              if (!data.success) {
+                throw new Error(data.error || 'Failed to edit file');
+              }
+
+              this.chatHistory.push({ role: 'model', parts: [{ functionCall: funcCall }] });
+              this.chatHistory.push({ 
+                role: 'user', 
+                name: funcCall.name, 
+                parts: [{ text: `Successfully edited file: ${args.fileName}` }] 
+              });
+
+              this.emit('status', 'File edited successfully');
+            } catch (error: unknown) {
+              console.error('Error editing file:', error);
+              this.emit('status', 'Error editing file');
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+              return `Error editing file: ${errorMessage}`;
+            }
+          } else if (isFunctionName(funcCall.name, 'imageGen') && isImageParams(funcCall.args)) {
+            this.emit('status', 'Generating image...');
+            const result = await this.imageGenerator.generateImage(funcCall.args.prompt);
+            const imageResult = result[0];
+            if (imageResult.type === 'image' && imageResult.data instanceof Buffer) {
+              const base64Data = imageResult.data.toString('base64');
+              const mimeType = `image/${imageResult.extension}`;
+              const dataUrl = `data:${mimeType};base64,${base64Data}`;
+              imageUri=dataUrl
+            } else if (isFunctionName(funcCall.name, 'getFile') && isFileParams(funcCall.args)) {
+              this.emit('status', `Reading file: ${funcCall.args.fileName || 'unknown'}`);
+              const filePath = await this.findFilePath(funcCall.args.fileName);
+              const fileContent = await this.readFile(filePath);
+              this.chatHistory.push({ role: 'model', parts: [{ text: fileContent }] });
+            }
           }
         }
       }
@@ -290,76 +355,18 @@ export class GeminiService extends EventEmitter {
     if (funcCall) {
       console.log('Function call detected:', funcCall);
 
-      if (funcCall.name === 'editFile') {
-        this.emit('status', `Editing file: ${funcCall.args?.fileName || 'unknown'}`);
-        const args: EditFileParams = funcCall.args as EditFileParams;
-        
-        try {
-          const res = await fetch('/api/code-edit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              filepath: args.fileName,
-              lineNumbers: args.lineStart && args.lineEnd ? `${args.lineStart}-${args.lineEnd}` : undefined,
-              operation: 'write',
-              code: args.code
-            }),
-          });
-
-          const data = await res.json();
-          if (!data.success) {
-            throw new Error(data.error || 'Failed to edit file');
-          }
-
-          this.chatHistory.push({ role: 'model', parts: [{ functionCall: funcCall }] });
-          this.chatHistory.push({ 
-            role: 'user', 
-            name: funcCall.name, 
-            parts: [{ text: `Successfully edited file: ${args.fileName}` }] 
-          });
-
-          this.emit('status', 'File edited successfully');
-        } catch (error: unknown) {
-          console.error('Error editing file:', error);
-          this.emit('status', 'Error editing file');
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-          return `Error editing file: ${errorMessage}`;
-        }
-      } else {
-        this.emit('status', `Reading file: ${funcCall.args?.fileName || 'unknown'}`);
-        const args: GetFileParams = funcCall.args as GetFileParams;
-        const fileName = args.fileName;
-        console.log('File name:', fileName);
-        
-        this.emit('status', 'Fetching file contents...');
-        const res = await fetch('/api/code-edit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filepath: funcCall.args.fileName || funcCall,
-            lineNumbers:
-              args.lineStart && args.lineEnd
-                ? `${args.lineStart}-${args.lineEnd}`
-                : undefined,
-            operation: 'read',
-          }),
+      this.emit('status', 'Analyzing response...');
+      if(funcCall.name == 'imageGen'){
+        fullReply=imageUri;
+      }else{
+        const followUp = await ai.models.generateContent({
+          model: this.model,
+          contents: this.chatHistory,
+          config: { tools: [{ functionDeclarations: [getFileDeclaration, editFileDeclaration] }] },
         });
         
-        const data = await res.json();
-        const content = data.content || data.error || '';
-        console.log('File content:', content);
-        
-        this.chatHistory.push({ role: 'user', name: funcCall.name, parts: [{ text: content }] });
+        fullReply = followUp.text || '';
       }
-
-      this.emit('status', 'Analyzing response...');
-      const followUp = await ai.models.generateContent({
-        model: this.model,
-        contents: this.chatHistory,
-        config: { tools: [{ functionDeclarations: [getFileDeclaration, editFileDeclaration] }] },
-      });
-      
-      fullReply = followUp.text || '';
       console.log('Follow-up response:', fullReply);
     } else {
       this.chatHistory.push({ role: 'model', parts: [{ text: fullReply }] });
@@ -478,11 +485,59 @@ export class GeminiService extends EventEmitter {
       return fileName;
     }
   }
+
+  private async readFile(filePath: string): Promise<string> {
+    const res = await fetch('/api/code-edit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filepath: filePath,
+        operation: 'read',
+      }),
+    });
+    
+    const data = await res.json();
+    return data.content || data.error || '';
+  }
+
+  async generateImage(prompt: string): Promise<{ imageData: Buffer; mimeType: string }> {
+    try {
+      this.emit('status', 'Generating image...');
+      const results = await this.imageGenerator.generateImage(prompt);
+      const imageResult = results[0];
+      
+      if (imageResult?.type === 'image' && imageResult.data instanceof Buffer) {
+        this.emit('status', 'Image generated successfully');
+        return {
+          imageData: imageResult.data,
+          mimeType: `image/${imageResult.extension || 'png'}`
+        };
+      }
+      throw new Error('No valid image generated');
+    } catch (error) {
+      console.error('Error generating image:', error);
+      this.emit('status', 'Error generating image');
+      throw error;
+    }
+  }
 }
 
 interface FileStructure {
   type: 'file' | 'directory';
   children?: Record<string, FileStructure>;
+}
+
+function isFileParams(args: GetFileParams | EditFileParams | ImageGenParams): args is GetFileParams | EditFileParams {
+  return 'fileName' in args;
+}
+
+function isImageParams(args: GetFileParams | EditFileParams | ImageGenParams): args is ImageGenParams {
+  return 'prompt' in args;
+}
+
+// Add type guard for function names
+function isFunctionName<T extends string>(name: string, expectedName: T): name is T {
+  return name === expectedName;
 }
 
 export const geminiService = new GeminiService();
