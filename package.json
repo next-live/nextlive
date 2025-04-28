@@ -44,6 +44,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@mui/icons-material": "^7.0.2",
     "@mui/material": "^7.0.2",
+    "@nextlive/server": "^1.0.7",
     "@types/react-syntax-highlighter": "^15.5.13",
     "antd": "^5.24.7",
     "dotenv": "^16.5.0",
