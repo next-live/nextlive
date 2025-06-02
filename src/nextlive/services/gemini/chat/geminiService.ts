@@ -27,8 +27,6 @@ The NextLive project has the following structure:
 {PROJECT_STRUCTURE}
 
 
-IMPORTANT: You MUST call chooseModel at the start of each interaction based on the user's request. Do not proceed with any other actions until the appropriate model is selected.
-
 ## Function Execution Strategy
 1. Recursive Function Calling:
    - Chain multiple function calls as needed to complete complex tasks
@@ -283,13 +281,22 @@ type chooseModelParams = { model:string};
 interface ChatMessagePart {
   text?: string;
   functionCall?: FunctionCall;
+  functionResponse?: FunctionResponse;
 }
 
 interface FunctionCall {
   name: string;
   args: GetFileParams | EditFileParams | ImageGenParams | ExecuteCommandParams | chooseModelParams;
 }
+interface Response{
+  output:string;
+}
+interface FunctionResponse {
+    name: string;
+    response: Response
+}
 
+interface Response extends Record<string, unknown> {}
 interface ChatMessage {
   role: 'user' | 'model';
   name?: string;
@@ -376,7 +383,6 @@ export class GeminiService extends EventEmitter {
         if (chunk.functionCalls && chunk.functionCalls.length) {
           const call = chunk.functionCalls[0];
           if (call.name) {
-            console.log(call)
             funcCall = {
               name: call.name,
               args: call.args as GetFileParams | EditFileParams | ImageGenParams | ExecuteCommandParams | chooseModelParams
@@ -384,7 +390,32 @@ export class GeminiService extends EventEmitter {
             if (isFunctionName(funcCall.name, 'editFile') && isFileParams(funcCall.args)) {
               this.emit('status', `Editing file: ${funcCall.args.fileName || 'unknown'}`);
               const args = funcCall.args as EditFileParams;
-              
+              if(chunk.text){
+                this.chatHistory.push({ 
+                  role: 'model', 
+                  parts:[
+                    {
+                      text:chunk.text,
+                      functionCall: {
+                        name: `editFile`,
+                        args: funcCall.args,
+                      }
+                    }
+                  ] 
+                });
+              }else{
+                this.chatHistory.push({ 
+                  role: 'model', 
+                  parts:[
+                    {
+                      functionCall: {
+                        name: `editFile`,
+                        args: funcCall.args,
+                      }
+                    }
+                  ] 
+                });
+              }
               try {
                 const res = await writeFile(args.fileName, args.code||"", args.lineStart && args.lineEnd ? `${args.lineStart}-${args.lineEnd}` : undefined);
                 if(!res.success){
@@ -394,7 +425,14 @@ export class GeminiService extends EventEmitter {
                 this.chatHistory.push({ 
                   role: 'user', 
                   name: funcCall.name, 
-                  parts: [{ text: `Successfully edited file: ${args.fileName}` }] 
+                  parts: [{
+                    functionResponse:{
+                      name:'editFile',
+                      response:{
+                        output:`Successfully edited file: ${args.fileName}`
+                      }
+                    }
+                  }] 
                 });
 
               } catch (error: unknown) {
@@ -403,14 +441,47 @@ export class GeminiService extends EventEmitter {
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
                 this.chatHistory.push({ 
                   role: 'user', 
-                  name: 'error', 
-                  parts: [{ text: `Error editing file: ${errorMessage}` }] 
+                  name: funcCall.name, 
+                  parts: [{
+                    functionResponse:{
+                      name:'editFile',
+                      response:{
+                        output:`Failed to edit ${args.fileName}`
+                      }
+                    }
+                  }] 
                 });
               }
             } else if (isFunctionName(funcCall.name, 'imageGen') && isImageParams(funcCall.args)) {
               this.emit('status', 'Generating image...');
               const result = await this.imageGenerator.generateImage(funcCall.args.prompt);
               const imageResult = result[0];
+              if(chunk.text){
+                this.chatHistory.push({ 
+                  role: 'model', 
+                  parts:[
+                    {
+                      text:chunk.text,
+                      functionCall: {
+                        name: `imageGen`,
+                        args: funcCall.args,
+                      }
+                    }
+                  ] 
+                });
+              }else{
+                this.chatHistory.push({ 
+                  role: 'model', 
+                  parts:[
+                    {
+                      functionCall: {
+                        name: `editFile`,
+                        args: funcCall.args,
+                      }
+                    }
+                  ] 
+                });
+              }
               if (imageResult.type === 'image' && imageResult.data instanceof Buffer) {
                 const base64Data = imageResult.data.toString('base64');
                 const mimeType = `image/${imageResult.extension}`;
@@ -424,27 +495,78 @@ export class GeminiService extends EventEmitter {
                     this.chatHistory.push({ 
                       role: 'user', 
                       name: funcCall.name,
-                      parts: [{ text: `Successfully generated image. It is stored at location ${path}. ` }] 
+                      parts: [
+                        {
+                          functionResponse:{
+                            name:'imageGen',
+                            response:{
+                              output:`Successfully generated image: ${imageUri}`
+                            }
+                          }
+                        }
+                      ] 
                     });
                   }
                 }else{
                   this.chatHistory.push({ 
                     role: 'user', 
                     name: funcCall.name,
-                    parts: [{ text: "Failed to save image" }] 
+                    parts: [{ 
+                      functionResponse:{
+                        name:'imageGen',
+                        response:{
+                          output:`Failed to generate image: ${funcCall.args.filename}`
+                        }
+                      }
+                    }] 
                   });
                 }
               }
             } else if (isFunctionName(funcCall.name, 'getFile') && isFileParams(funcCall.args)) {
               this.emit('status', `Reading file: ${funcCall.args.fileName || 'unknown'}`);
+              if(chunk.text){
+                this.chatHistory.push({ 
+                  role: 'model', 
+                  parts:[
+                    {
+                      text:chunk.text,
+                      functionCall: {
+                        name: `getFile`,
+                        args: funcCall.args,
+                      }
+                    }
+                  ] 
+                });
+              }else{
+                this.chatHistory.push({ 
+                  role: 'model', 
+                  parts:[
+                    {
+                      functionCall: {
+                        name: `getFile`,
+                        args: funcCall.args,
+                      }
+                    }
+                  ] 
+                });
+              }
               const filePath = await this.findFilePath(funcCall.args.fileName);
               const fileContent = await this.readFile(filePath);
               // Add file content as user message
               this.chatHistory.push({ 
                 role: 'user', 
-                name: funcCall.name, 
-                parts: [{ text: fileContent }] 
+                parts:[
+                  {
+                    functionResponse:{
+                      name:'getFile',
+                      response:{
+                        output:`${fileContent}`
+                      }
+                    }
+                  }
+                ] 
               });
+
             } else if (isFunctionName(funcCall.name, 'executeCommand') && isCommandParams(funcCall.args)) {
               const args = funcCall.args as ExecuteCommandParams;
               await this.executeCommand(args.command, args.isBackground);
